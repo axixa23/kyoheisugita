@@ -6,19 +6,24 @@
   <title>リモートPC電源スイッチ</title>
   <style>
     :root {
-      --bg-color: #f4f6f8;
+      --bg-color: #f8fafc;
       --card-bg: #ffffff;
-      --text-color: #333333;
-      --primary-color: #007bff;
-      --primary-hover: #0056b3;
-      --sub-color: #6c757d;
-      --border-radius: 12px;
+      --text-main: #334155;
+      --text-muted: #64748b;
+      --primary-color: #3b82f6;
+      --primary-hover: #2563eb;
+      --border-color: #e2e8f0;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background-color: var(--bg-color);
-      color: var(--text-color);
+      color: var(--text-main);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -29,31 +34,35 @@
 
     .card {
       background: var(--card-bg);
-      padding: 28px;
-      border-radius: var(--border-radius);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      padding: 28px 24px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
       width: 100%;
       max-width: 360px;
       text-align: center;
     }
 
     h1 {
-      font-size: 1.25rem;
+      font-size: 1.1rem;
+      font-weight: 600;
       margin-top: 0;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
+      color: var(--text-main);
+      letter-spacing: -0.01em;
     }
 
     .power-btn {
       background-color: var(--primary-color);
-      color: white;
+      color: #ffffff;
       border: none;
-      border-radius: var(--border-radius);
-      padding: 16px 24px;
-      font-size: 1.1rem;
-      font-weight: bold;
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      font-size: 0.95rem;
+      font-weight: 500;
       width: 100%;
       cursor: pointer;
-      transition: background-color 0.2s, transform 0.1s;
+      transition: background-color 0.15s ease, transform 0.05s ease;
     }
 
     .power-btn:hover {
@@ -61,28 +70,42 @@
     }
 
     .power-btn:active {
-      transform: scale(0.98);
-    }
-
-    .info-box {
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 1px solid #eeeeee;
-      font-size: 0.9rem;
-      color: var(--sub-color);
-    }
-
-    .last-executed {
-      font-weight: bold;
-      color: #333333;
-      margin-top: 4px;
-      word-break: break-all;
+      transform: scale(0.99);
     }
 
     .status-msg {
-      margin-top: 12px;
+      margin-top: 14px;
       font-size: 0.85rem;
       min-height: 1.2em;
+    }
+
+    .info-box {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .last-executed {
+      font-weight: 500;
+      color: var(--text-main);
+      margin-top: 4px;
+    }
+
+    .nav-link {
+      display: inline-block;
+      margin-top: 16px;
+      padding-top: 12px;
+      font-size: 0.85rem;
+      color: #3b82f6;
+      text-decoration: none;
+      transition: opacity 0.15s ease;
+    }
+
+    .nav-link:hover {
+      opacity: 0.8;
+      text-decoration: underline;
     }
   </style>
 </head>
@@ -99,14 +122,16 @@
       <div>最終実行日時</div>
       <div id="last-executed" class="last-executed">未実行</div>
     </div>
+
+    <a href="https://remotedesktop.google.com/access" target="_blank" rel="noopener noreferrer" class="nav-link">
+      Chrome リモート デスクトップを開く &rarr;
+    </a>
   </div>
 
   <script>
-    // IFTTT Webhook URL
     const IFTTT_URL = "https://maker.ifttt.com/trigger/pc-on/json/with/key/MgiXPyJ8nSsN41G2wBZyw";
     const STORAGE_KEY = "pc_on_last_executed";
 
-    // 画面読み込み時に保存された最終実行日時を表示
     window.addEventListener('DOMContentLoaded', () => {
       const savedDate = localStorage.getItem(STORAGE_KEY);
       if (savedDate) {
@@ -114,22 +139,19 @@
       }
     });
 
-    // 確認ダイアログを出してからリクエストを送信する関数
     function confirmAndPowerOn() {
       const isConfirmed = confirm("本当にPCの電源をオンにしますか？");
       if (!isConfirmed) return;
 
       const statusEl = document.getElementById('status');
-      statusEl.style.color = '#007bff';
+      statusEl.style.color = '#3b82f6';
       statusEl.textContent = "送信中...";
 
-      // mode: 'no-cors' により、IFTTTのCORSエラー（ブラウザの制限）を回避して送信します
       fetch(IFTTT_URL, {
         method: 'POST',
         mode: 'no-cors'
       })
       .then(() => {
-        // 現在日時を取得してフォーマット (YYYY/MM/DD HH:mm:ss)
         const now = new Date();
         const formattedDate = now.getFullYear() + '/' +
           String(now.getMonth() + 1).padStart(2, '0') + '/' +
@@ -138,16 +160,15 @@
           String(now.getMinutes()).padStart(2, '0') + ':' +
           String(now.getSeconds()).padStart(2, '0');
 
-        // ローカルストレージに保存＆画面更新
         localStorage.setItem(STORAGE_KEY, formattedDate);
         document.getElementById('last-executed').textContent = formattedDate;
 
-        statusEl.style.color = '#28a745';
+        statusEl.style.color = '#10b981';
         statusEl.textContent = "送信要求を完了しました";
       })
       .catch(error => {
         console.error('Error:', error);
-        statusEl.style.color = '#dc3545';
+        statusEl.style.color = '#ef4444';
         statusEl.textContent = "送信エラーが発生しました";
       });
     }
