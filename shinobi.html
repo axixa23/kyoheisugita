@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>シノビ（仮題） 試作 v77</title>
+<title>シノビ（仮題） 試作 v78</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -357,7 +357,8 @@ button{font:inherit;color:inherit}
   <div id="top">
     <div id="stageTitle"></div>
     <div style="display:flex;gap:5px;flex:none">
-      <button class="iconBtn" id="titleBtn" type="button">≡</button>
+      <button class="iconBtn" id="titleBtn" type="button">タイトル</button>
+      <button class="iconBtn" id="shareBtn" type="button">共有</button>
       <button class="iconBtn" id="yakuBtn" type="button">役</button>
       <button class="iconBtn" id="devBtn" type="button">開発</button>
       <button class="iconBtn" id="skinBtn" type="button">見た目</button>
@@ -771,8 +772,8 @@ function loadPuzzles(){ try{ return JSON.parse(localStorage.getItem(PUZ_KEY)||'[
 function savePuzzles(a){ try{ localStorage.setItem(PUZ_KEY,JSON.stringify(a)); }catch(e){} }
 const sameM=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 // 局の始めの盤面・手札・道具・技・巻物を、短いデータにする
-function makePuzzle(name){
-  const st=S.replayData.start, e=[];
+function makePuzzle(name,st0){
+  const st=st0||S.replayData.start, e=[];
   st.board.forEach((row,r)=>row.forEach((o,c)=>{ if(!o||o.side!=='e') return; const x={c,r,k:o.card.code};
     if(o.sword) x.s=1; if(o.fake) x.f=1; if(o.hp>1) x.h=o.hp; if(!sameM(o.card.m,T[o.card.code].m)) x.m=o.card.m; e.push(x); }));
   const hand=st.hand.filter(c=>c.kind==='p').map(c=>{ const h={k:c.code}; if(!sameM(c.m,T[c.code].m)) h.m=c.m; if((c.moves||1)>1) h.mv=c.moves; if(c.v!==T[c.code].v) h.v=c.v; if(c.g) h.g=c.g; return h; });
@@ -783,6 +784,21 @@ function makePuzzle(name){
 }
 const encPuzzle=P=>'SNB1:'+btoa(unescape(encodeURIComponent(JSON.stringify(P))));
 function decPuzzle(code){ try{ const t=code.trim().replace(/^SNB1:/,''); const P=JSON.parse(decodeURIComponent(escape(atob(t)))); return P&&P.n&&P.e?P:null; }catch(e){ return null; } }
+// 解いている途中でも、この局の始めの盤面をコードで共有できる
+function shareNow(){
+  if(!S||busy||S.phase!=='play'||!S.turnStart){ hintMsg('局の途中で共有できる'); return; }
+  const f=FACES[S.face]||{name:''};
+  const P=S.puzzle||makePuzzle(`${MODE_NM[S.mode]||''}・${faceTitle(S.face)} ${f.name}`,S.turnStart), code=encPuzzle(P);
+  openModal(`<h2>この盤面を共有</h2><p>局の始めの盤面・手札・道具・技・巻物をコードにした。相手はタイトルの「パズル」→「コードから追加」で遊べる。</p>
+    <textarea id="shCode" readonly style="width:100%;height:6em;font-size:.72rem">${code}</textarea>
+    <button class="btn pri" id="shCopy" type="button" style="width:100%;margin:6px 0">コードをコピー</button>
+    ${S.puzzle?'':`<button class="btn" id="shSave" type="button" style="width:100%;margin-bottom:6px">パズルとして保存</button>`}
+    <button class="btn" id="shClose" type="button" style="width:100%">閉じる</button>`);
+  $('#shCode').onclick=e=>e.target.select();
+  $('#shCopy').onclick=e=>copyText(code,e.currentTarget);
+  if(!S.puzzle) $('#shSave').onclick=e=>{ const a=loadPuzzles(); a.unshift({id:Date.now(),name:P.name,code,best:0,score:0}); savePuzzles(a.slice(0,60)); e.currentTarget.disabled=true; e.currentTarget.textContent='保存した'; bachin(3); };
+  $('#shClose').onclick=closeModal;
+}
 function savePuzzleNow(btn){
   const f=FACES[S.face], P=makePuzzle(`${MODE_NM[S.mode]||''}・${faceTitle(S.face)} ${f.name}`);
   const a=loadPuzzles(); a.unshift({id:Date.now(),name:P.name,code:encPuzzle(P),best:0,score:0}); savePuzzles(a.slice(0,60));
@@ -885,7 +901,7 @@ function recordEnd(won){ if(S.demo) return; META.runs++; if(won) META.clears[S.m
 const fixedStars=()=>Object.values(META.stars).reduce((a,b)=>a+b,0);
 function showTitle(){
   const d=loadRun(), N=ACTS*PER_ACT, best=k=>META.best[k]<0?'まだ':META.best[k]>=N-1&&META.clears[k]?'制覇':faceTitle(META.best[k])+'まで';
-  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v77</p></div>
+  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v78</p></div>
     ${d?`<button class="btn pri" id="tCont" type="button" style="width:100%;margin-bottom:6px">つづきから<br><small>${MODE_NM[d.S.mode]||'固定'}・${faceTitle(d.S.face)}${d.S.resumeAt==='kyoku'?'':(d.S.retry?'（出直し前）':'を突破したところ')}</small></button>
     <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:12px">最初から（${MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
     <button class="btn${d?'':' pri'} modeB" id="tFixed" type="button"><b>固定モード</b><small>陣はいつも同じ。覚えて、上達する。<br>記録：${best('fixed')}　★${fixedStars()}/${N*3}</small></button>
@@ -2449,6 +2465,7 @@ $('#skinBtn').onclick=skinPicker;
 $('#devBtn').onclick=devPanel;
 $('#yakuBtn').onclick=()=>{if(S) showYaku();};
 $('#titleBtn').onclick=()=>{ if(busy) return; showTitle(); };
+$('#shareBtn').onclick=shareNow;
 window.addEventListener('resize',()=>{if(S&&S.board) render();});
 newRun('fixed',true); // 背景用の盤（記録・セーブはしない）
 showTitle();
