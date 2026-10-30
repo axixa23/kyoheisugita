@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>シノビ（仮題） 試作 v73</title>
+<title>シノビ（仮題） 試作 v76</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -348,6 +348,8 @@ button{font:inherit;color:inherit}
 .dkC:disabled{opacity:.3;cursor:default}
 #yakuRow{display:none}
 .tkMore{font-size:.75rem;font-weight:800;color:var(--gold);align-self:center}
+.econ{border-collapse:collapse;font-size:.72rem;width:100%}.econ th,.econ td{border-bottom:1px solid var(--line);padding:2px 4px;text-align:right;white-space:nowrap}
+.tp.usedC{opacity:.28;filter:grayscale(1);pointer-events:none}
 </style>
 </head>
 <body>
@@ -389,6 +391,20 @@ const MAX_FANS=5;
 // 着想：Pawnbarian（1体のコマを、駒の動きの札で動かす）
 // v27：1局＝1手番。持ち物（駒札・札）は引かずに全部手元にある。決行して王を討てなければ撤退
 // 星3つ：王を討つ／全員を討つ／基準点の4倍以上
+/* ===== 調整表：お金と値段は、ここ（と開発パネルの「調整表」）だけで変える ===== */
+const BAL0={
+  clear:{normal:3,mid:4,big:5}, star:1, scoreMax:3, interestPer:5, interestMax:3, skip:2, rerollStart:2,
+  item:{bomb:5,arrow:4,stone:4,missive:9,lure:3,magnet:4,shield:6,mirror:4}, itemStep:1,  // 道具：棚に1個あるごとに+1
+  piece:{1:3,2:5,3:8,4:12}, pieceStep:0,
+  fan:{add:6,mul:10,rule:14}, fanStep:2,       // 巻物：1つ持つごとに+2
+  tech:8, techStep:4,                           // 技を覚える：1つ覚えるごとに+4
+  techUp:{base:4,step:2}, techMore:{base:3,step:3}, tslot:{base:8,step:2}, bombUp:{base:4,step:2},
+  heal:5, slot:12, shelf:8, book:4, dirUp:4,
+};
+let BAL=clone0(BAL0);
+function clone0(o){ return JSON.parse(JSON.stringify(o)); }
+try{ const o=JSON.parse(localStorage.getItem('shinobiRL.bal')||'null'); if(o) BAL=Object.assign(clone0(BAL0),o); }catch(e){}
+const lin=(p,n)=>p.base+p.step*n;
 const HP0=3, STAR_GOLD=1, HEAL_PRICE=5, SLOTS0=5, SLOTS_MAX=10, SLOT_PRICE=12;
 // 道具棚：道具は駒袋に入らず棚に並ぶ。毎局の始めに全部使える状態に戻り、1局に1回ずつ使える
 const SHELF0=5, SHELF_MAX=8, SHELF_UP_PRICE=8;
@@ -398,7 +414,7 @@ const CHIP_PER_V=5, MOVE_CHIP=3; // 動いた1マスにつきチップ+3（役�
 // 点数ボーナス：基準点（巻物なしで素直に王を取ったくらい）に届けば+1、そこから2倍ごとに+1、最大+5
 const PAR=new Proxy([],{get:(a,k)=>typeof k==='string'&&/^\d+$/.test(k)?Math.round(400*Math.pow(1.36,+k)/10)*10:a[k]}); // 面が進むほど基準点が上がる（1面ごとに×1.36。第一面400 → 最終面約29600）
 const SCORE_GOLD_MAX=3;
-const scoreGold=(sc,par)=>sc<par?0:Math.min(SCORE_GOLD_MAX,1+Math.floor(Math.log2(sc/par)));
+const scoreGold=(sc,par)=>sc<par?0:Math.min(BAL.scoreMax,1+Math.floor(Math.log2(sc/par)));
 const SKIP_GOLD=2;
 
 /* ===== 駒（動きの部品）。向きは盤に見えているまま ===== */
@@ -442,9 +458,9 @@ const SUITS=['♠','♥','♦','♣'], SC={'♠':'sp','♥':'he','♦':'di','♣
 const ITEMS={
   bomb:{name:'爆弾',desc:'床に置く。止まると爆発し、周りの敵を討つ。爆風の通り道の石垣も壊す（鉄扉は壊れない）'},
   arrow:{name:'矢印',desc:'床に置く。踏むとその向きへ滑り、最初の敵を討つ'},
-  magnet:{name:'磁石',desc:'2マス先の敵を1体、引き寄せる'},
-  lure:{name:'囮',desc:'敵を1体おびき寄せる。王も来る'},
-  missive:{name:'密書',desc:'敵を1体おびき寄せ、味方にする（王は来ない）'},
+  magnet:{name:'磁石',desc:'2マス先の敵を1体、引き寄せる（光るマスに置ける）'},
+  lure:{name:'囮',desc:'敵を1体おびき寄せる。王も来る。爆弾の上に置けば、踏ませて爆発させられる'},
+  missive:{name:'密書',desc:'敵を1体選び、手札1枚と引き換えに寝返らせる。その駒は1回動いたら去る（王と剣持ちは不可）'},
   shield:{name:'盾',desc:'持っているだけで、斬られるのを1回防ぐ'},
   mirror:{name:'鏡',desc:'床に置く。走ってきた駒を直角に曲げる'},
   stone:{name:'飛び石',desc:'床に置く。止まると、使った動きが戻る'},
@@ -455,7 +471,7 @@ const ITEM_TAG={bomb:'爆',arrow:'筆',stone:'筆',missive:'寝',lure:'',magnet:
 const ITEM_PRICE={bomb:5,arrow:4,stone:4,missive:6,lure:3,magnet:4,shield:6,mirror:4};
 // 技：道具とは別。移動を強くする技で、使うとき手札を1枚捨てる。1局に1回ずつ。茶屋で覚える
 const TECHS={
-  kei:{name:'跳躍',k:'跳',maxLv:2,lvs:['','2枚で跳ぶ','1枚で跳ぶ'],desc:'L字に跳ぶ動き（8方向）を1回得る。壁も駒も跳び越える'},
+  kei:{name:'跳躍',k:'跳',desc:'次の1手が、壁（石垣・鉄扉）を越える'},
   dash:{name:'疾走',k:'走',maxLv:2,lvs:['','疾走','疾走／貫通'],desc:'次の1手が、どこまでも進む。修行すると「貫通」も選べる：壁を越え、通り道の敵を全部討つ'},
   sword:{name:'剣',k:'剣',cost:1,maxLv:5,lvs:['','十字の1方向','8方向の1方向','3方向','全方向','飛ぶ斬撃'],desc:'動かずに、隣の敵を斬る。王も斬れる'},
 };
@@ -464,8 +480,8 @@ const TECH_SLOTS0=3, TECH_SLOTS_MAX=6, TECH_PRICE=8;
 const techN=k=>(S.techN&&S.techN[k])||1;                       // 1局に使える回数
 const techLeft=k=>techN(k)-(S.techUsed||[]).filter(x=>x===k).length;
 const techTotal=()=>(S.techs||[]).reduce((a,k)=>a+techN(k),0);
-const techMorePrice=n=>3+3*n;  // +1回：1→2回は6金、2→3回は9金…
-const tslotPrice=()=>8+2*((S.techSlots||TECH_SLOTS0)-TECH_SLOTS0);
+const techMorePrice=n=>lin(BAL.techMore,n);
+const tslotPrice=()=>lin(BAL.tslot,(S.techSlots||TECH_SLOTS0)-TECH_SLOTS0);
 // 剣の段：Lv1 十字から1方向 → Lv2 8方向から1方向 → Lv3 連続する3方向 → Lv4 8方向すべて → Lv5 斬撃が飛ぶ（最初に当たった敵まで。石垣で止まる）
 const SWORD_MAX=5;
 const swordNeedsDir=lv=>lv<=3;
@@ -474,11 +490,11 @@ function swordDirs(lv,dir){
   const i=ST8.findIndex(([x,y])=>dir&&x===dir[0]&&y===dir[1]); if(i<0) return [];
   return lv>=3?[ST8[(i+7)%8],ST8[i],ST8[(i+1)%8]]:[ST8[i]];
 }
-const techUpPrice=lv=>4+2*lv; // 修行の値段：Lv1→2は6金 … Lv4→5は12金
+const techUpPrice=lv=>lin(BAL.techUp,lv);
 // 捨てる手札の枚数：強い段ほど重い（序盤はやりくり、後半は余った札で撃つ）
 function techCost(k,mode){ const lv=techLv(k);
   if(k==='dash') return mode==='pierce'?1:0;
-  if(k==='kei') return lv>=2?1:2; // 跳躍：はじめは2枚。修行（まれ）で1枚に
+  if(k==='kei') return 0; // 跳躍：疾走と同じく0枚
   if(k==='sword') return lv>=4?2:1;
   return 1; }
 const costLabel=k=>k==='dash'&&techLv('dash')>=2?'疾走0枚／貫通1枚':`${techCost(k)}枚`;
@@ -695,7 +711,7 @@ const mkI=it=>({id:uid++,kind:'i',it,v:1,lv:1});
 // 爆弾の範囲：Lv1 十字4マス → Lv2 周り8マス → Lv3 周り8マス＋十字の直線 → Lv4 十字と斜めの直線すべて（どの段も前の段を含む）
 const BOMB_MAX=4;
 const BOMB_LV=['','十字4マス','周り8マス','周り8マス＋十字の直線','十字と斜めの直線すべて'];
-const bombUpPrice=lv=>4+2*lv; // Lv1→2は6金、2→3は8金、3→4は10金
+const bombUpPrice=lv=>lin(BAL.bombUp,lv); // Lv1→2は6金、2→3は8金、3→4は10金
 function bombRays(x,y,lv){
   const cells=[], bh=new Set(), bv=new Set(), H=new Set(S.H||[]), V=new Set(S.V||[]), HI=new Set(S.HI||[]), VI=new Set(S.VI||[]);
   const ray=(dx,dy,far)=>{ let cx=x, cy=y;
@@ -735,6 +751,7 @@ const PASS=[
   {at:50,kind:'skin', key:'kabuto',    nm:'見た目「兜」'},
   {at:55,kind:'fan',  key:'katanagari',nm:'巻物「刀狩り」'},
   {at:60,kind:'legend',key:'Ryuo',     nm:'伝説の駒「龍王」（裏モード）'},
+  {at:65,kind:'item', key:'missive',   nm:'道具「密書」'},
   {at:70,kind:'skin', key:'shuriken',  nm:'見た目「手裏剣」'},
   {at:80,kind:'skin', key:'kitsune',   nm:'見た目「狐面」'},
 ];
@@ -760,7 +777,7 @@ function makePuzzle(name){
     if(o.sword) x.s=1; if(o.fake) x.f=1; if(o.hp>1) x.h=o.hp; if(!sameM(o.card.m,T[o.card.code].m)) x.m=o.card.m; e.push(x); }));
   const hand=st.hand.filter(c=>c.kind==='p').map(c=>{ const h={k:c.code}; if(!sameM(c.m,T[c.code].m)) h.m=c.m; if((c.moves||1)>1) h.mv=c.moves; if(c.v!==T[c.code].v) h.v=c.v; if(c.g) h.g=c.g; return h; });
   return {v:1,name,n:S.n,e,H:st.H,V:st.V,HI:st.HI||[],VI:st.VI||[],hand,
-    tools:(st.tools||[]).map(c=>({i:c.it,n:c.left||1,lv:c.lv||1})),
+    tools:(st.tools||[]).map(c=>({i:c.it,n:c.max||c.left||1,lv:c.lv||1})),
     techs:(S.techs||[]).map(k=>[k,techLv(k),techN(k)]), fans:S.fans.slice(),
     levels:Object.fromEntries(Object.entries(S.levels).filter(([k,v])=>v>1)), hp:Math.max(0,st.hp), face:S.face};
 }
@@ -805,11 +822,11 @@ function startPuzzleKyoku(){
   for(const x of P.e){ const card=mkP(x.k); if(x.m) card.m=clone(x.m); const o={side:'e',card,held:[],sword:!!x.s}; if(x.f) o.fake=true; if(x.h) o.hp=x.h; S.board[x.r][x.c]=o; }
   S.formation=P.e.map(x=>x.k);
   S.H=(P.H||[]).slice(); S.V=(P.V||[]).slice(); S.HI=(P.HI||[]).slice(); S.VI=(P.VI||[]).slice();
-  S.tools=(P.tools||[]).map(t=>({...mkI(t.i),lv:t.lv||1,left:t.n||1,tool:true}));
+  S.tools=(P.tools||[]).map(t=>({...mkI(t.i),lv:t.lv||1,left:t.n||1,max:t.n||1,tool:true}));
   S.hand=(P.hand||[]).map(h=>{ const c=mkP(h.k); if(h.m){ c.m=clone(h.m); c.custom=true; } if(h.mv) c.moves=h.mv; if(h.v) c.v=h.v; if(h.g) c.g=h.g; return c; });
   S.bag=clone(S.hand); S.hp=P.hp??HP0; S.faceScore=0;
   S.tokens={}; S.ikkou=false; S.kyokuStartScore=0; S.discard=[];
-  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
+  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
   S.enemiesInit=S.board.flat().filter(o=>o&&o.side==='e').length;
   S.sel=null; S.selPos=null; S.pending=null; S.armed=null; S.phase='play';
   beginTurn();
@@ -868,7 +885,7 @@ function recordEnd(won){ if(S.demo) return; META.runs++; if(won) META.clears[S.m
 const fixedStars=()=>Object.values(META.stars).reduce((a,b)=>a+b,0);
 function showTitle(){
   const d=loadRun(), N=ACTS*PER_ACT, best=k=>META.best[k]<0?'まだ':META.best[k]>=N-1&&META.clears[k]?'制覇':faceTitle(META.best[k])+'まで';
-  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v73</p></div>
+  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v76</p></div>
     ${d?`<button class="btn pri" id="tCont" type="button" style="width:100%;margin-bottom:6px">つづきから<br><small>${MODE_NM[d.S.mode]||'固定'}・${faceTitle(d.S.face)}${d.S.resumeAt==='kyoku'?'':(d.S.retry?'（出直し前）':'を突破したところ')}</small></button>
     <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:12px">最初から（${MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
     <button class="btn${d?'':' pri'} modeB" id="tFixed" type="button"><b>固定モード</b><small>陣はいつも同じ。覚えて、上達する。<br>記録：${best('fixed')}　★${fixedStars()}/${N*3}</small></button>
@@ -928,13 +945,13 @@ function startKyoku(){
     if(flag==='fake') o.fake=true;
     S.board[r][c]=o;}
   S.H=(f.h||[]).map(([x,y])=>x+','+y); S.V=(f.v||[]).map(([x,y])=>x+','+y); S.HI=(f.hi||[]).map(([x,y])=>x+','+y); S.VI=(f.vi||[]).map(([x,y])=>x+','+y);
-  S.tools=S.shelf.map(e=>({...mkI(e.it),lv:e.lv||1,left:e.n,tool:true})); // 道具棚の道具は毎局すべて使える（右下の数字が残り回数）
+  S.tools=S.shelf.map(e=>({...mkI(e.it),lv:e.lv||1,left:e.n,max:e.n,tool:true})); // 道具棚の道具は毎局すべて使える（右下の数字が残り回数）
   S.tokens={}; S.ikkou=false; S.kyokuStartScore=S.faceScore; S.hand=clone(S.bag).map(c=>({...c,id:uid++})); S.discard=[];
   if(S.rule==='hyoro'&&S.hand.length>1) S.hand.splice(rand(S.hand.length),1); // 兵糧攻め：持ち物が1枚使えない
   // ランダムの陣で出だしがなければ、作り直す
   if(GEN[S.face]&&!layoutOK()&&(S.regen=(S.regen||0)+1)<30){ Object.assign(FACES[S.face],genLayout(S.face,S.layoutSeed,100+S.regen)); return startKyoku(); }
   S.regen=0;
-  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.techs=S.techs||[]; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
+  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.techs=S.techs||[]; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
   S.enemiesInit=S.board.flat().filter(o=>o&&o.side==='e').length;
   S.sel=null; S.selPos=null; S.pending=null; S.armed=null; S.phase='play';
   beginTurn();
@@ -971,7 +988,9 @@ function wallHit(H,V,x,y,dx,dy){
   return (h1&&h2)||(v1&&v2)||(h1&&v1)||(h2&&v2);
 }
 // side：動く側。同じ側の駒には止められ、相手の駒は取れる
+let NOWALL=false; // 跳躍中の駒の動きを調べている間だけtrue（自分の駒の動きにだけ効く）
 function movesOf(b,x,y,m,side){
+  if(side!=='p'&&NOWALL){ NOWALL=false; try{ return movesOf(b,x,y,m,side); } finally{ NOWALL=true; } }
   const out=new Map(), wrap=side==='p'&&S.fans&&S.fans.includes('nukeana'); // 抜け穴：左右の端がつながる
   for(const [dx,dy,rg] of m){
     const leap=Math.abs(dx)>1||Math.abs(dy)>1, max=rg===0?99:rg, step=Math.max(Math.abs(dx),Math.abs(dy));
@@ -979,7 +998,7 @@ function movesOf(b,x,y,m,side){
     for(let k=1;k<=max;k++){
       let nx=px+dx, ny=py+dy; if(wrap&&ny>=0&&ny<S.n) nx=(nx%S.n+S.n)%S.n;
       if(!inB(nx,ny)||(nx===x&&ny===y)) break;
-      if(!leap&&blocked(px,py,dx,dy)) break;
+      if(!leap&&!NOWALL&&blocked(px,py,dx,dy)) break;
       px=nx; py=ny;
       const o=b[ny][nx];
       if(o&&o.side==='i'){
@@ -1105,7 +1124,7 @@ function calc(){
 
 
 /* ===== 計画：操作はすぐ盤に反映するが、演出なし。実行で頭から再生する ===== */
-const SNAPKEYS=['hp','detected','techUsed','dash','board','hand','tools','discard','dai','tokens','log','armed','H','V','HI','VI','lost','kingTaken','kingLast','freeUsed','lastTurn'];
+const SNAPKEYS=['hp','detected','techUsed','dash','board','hand','tools','discard','dai','tokens','log','armed','H','V','HI','VI','lost','kingTaken','kingLast','leap','freeUsed','lastTurn'];
 function snapshot(){const o={}; for(const k of SNAPKEYS) o[k]=S[k]; return clone(o);}
 function restore(sn){Object.assign(S,clone(sn));}
 const handIdx=id=>S.hand.findIndex(c=>c.id===id);
@@ -1113,7 +1132,7 @@ const handIdx=id=>S.hand.findIndex(c=>c.id===id);
 const getCard=id=>S.hand.find(c=>c.id===id)||(S.tools||[]).find(c=>c.id===id)||null;
 function takeCard(id){ let i=handIdx(id); if(i>=0) return S.hand.splice(i,1)[0];
   i=(S.tools||[]).findIndex(c=>c.id===id); if(i<0) return null;
-  const c=S.tools[i]; if((c.left||1)>1){ c.left--; return {...clone(c),id:uid++,left:1}; } return S.tools.splice(i,1)[0]; }
+  const c=S.tools[i]; if((c.left||0)<=0) return null; c.left--; return {...clone(c),id:uid++,left:1}; } // 使った分は灰色で残る
 function resetRun(){S.log.runPid=null; S.log.run=0;}
 // 取った敵は元の駒として戻る。敵が奪っていた自分の駒も一緒に戻る
 function cardsFromEnemy(o){
@@ -1128,7 +1147,7 @@ const tokensOf=id=>S.tokens[id]||(S.tokens[id]=[]);
 // 点は局の中で一度きり。黒い点＝残っている基本の動き、奪った動き＝1回分の動き（使うまで残る）
 const specsLeft=o=>o.card.m.filter(sp=>!(o.used||[]).includes(sp.join(',')));
 // 駒札の動きで行ける先（空きマスへも行ける）
-function cardTargets(x,y,card){
+function cardTargets0(x,y,card){
   const p=S.board[y][x];
   // 貫通の構えなら、札の動きのまま盤の端まで突き抜ける
   const mm=p&&S.dash===p.card.id?dashM(card.m):card.m; // 疾走：1マスの動きがどこまでも
@@ -1138,7 +1157,12 @@ function cardTargets(x,y,card){
 }
 // 疾走：その駒の次の1手（駒札・黒い点・奪った動きのどれでも）の1マスの動きが、どこまでも進む
 const dashM=m=>m.map(([dx,dy,r])=>[dx,dy,Math.abs(dx)<=1&&Math.abs(dy)<=1?0:r]);
-function legalTargets(x,y){
+// 寝返った駒は王を取れず、反撃も受けない（一太刀で去るので）。跳躍中は壁を越える
+function withRules(x,y,f){ const p=S.board[y]&&S.board[y][x]; const keep=NOWALL; NOWALL=!!(p&&S.leap&&S.leap===p.card.id);
+  try{ let out=f(); if(p&&p.card.turned) out=out.filter(t=>!t.caps.some(([cx,cy])=>S.board[cy][cx]&&S.board[cy][cx].card.code==='K')).map(t=>({...t,danger:false})); return out; } finally{ NOWALL=keep; } }
+function legalTargets(x,y){ return withRules(x,y,()=>legalTargets0(x,y)); }
+function cardTargets(x,y,card){ return withRules(x,y,()=>cardTargets0(x,y,card)); }
+function legalTargets0(x,y){
   const p=S.board[y][x]; if(!p||p.side!=='p') return [];
   const id=p.card.id, dz=S.dash===id, tks=(S.tokens[id]||[]).map(t=>has('uragaeshi')&&t.src==='cap'?{...t,m:union(t.m,flipM(t.m))}:t).map(t=>dz?{...t,m:dashM(t.m)}:t), sl=o=>dz?dashM(specsLeft(o)):specsLeft(o);
   let out;
@@ -1171,13 +1195,19 @@ function applyAct(a){
       toDiscard(card); d.pulls=[];
       const cs=magnetCands(S.board,a.x,a.y), pk=(a.tgt&&cs.find(c=>c.from[0]===a.tgt[0]&&c.from[1]===a.tgt[1]))||cs[0];
       if(pk){ const o=S.board[pk.from[1]][pk.from[0]]; S.board[pk.to[1]][pk.to[0]]=o; S.board[pk.from[1]][pk.from[0]]=null; d.pulls.push(pk); }
-    } else if(card.it==='lure'||card.it==='missive'){
+    } else if(card.it==='missive'){
+      // 密書：選んだ敵が、その場で寝返る（手札1枚を捨てる）
+      toDiscard(card); for(const cid of (a.costIds||[])){ const cc=S.hand.splice(handIdx(cid),1)[0]; if(cc){ S.discard.push(cc); L.used++; } }
+      const o=S.board[a.y][a.x];
+      if(canTurn(o)){ const pc={...o.card,id:uid++,turned:true,v:T[o.card.code].v}; S.board[a.y][a.x]={side:'p',card:pc,held:[]}; L.turned++; d.turned=true; }
+    } else if(card.it==='lure'){
       toDiscard(card); d.lured=null;
-      const cs=lurers(S.board,a.x,a.y,card.it==='lure'), src=(a.tgt&&cs.find(c=>c[0]===a.tgt[0]&&c[1]===a.tgt[1]))||cs[0]||null;
+      const bomb=isBombAt(a.x,a.y)?S.board[a.y][a.x]:null;
+      const cs=lurers(lureBoard(a.x,a.y),a.x,a.y,true), src=(a.tgt&&cs.find(c=>c[0]===a.tgt[0]&&c[1]===a.tgt[1]))||cs[0]||null;
       if(src){
         const [ex,ey]=src, o=S.board[ey][ex]; S.board[ey][ex]=null; d.lured={from:[ex,ey],to:[a.x,a.y]};
-        if(card.it==='lure'){ S.board[a.y][a.x]=o; } // 囮：おびき寄せるだけ（剣はそのまま）
-        else { const pc={...o.card,id:uid++,turned:true,v:T[o.card.code].v}; S.board[a.y][a.x]={side:'p',card:pc,held:[]}; L.turned++; d.turned=true; }
+        S.board[a.y][a.x]=o; // 囮：おびき寄せるだけ（剣はそのまま）
+        if(bomb){ const hp=heroPos(), hero=hp?S.board[hp[1]][hp[0]]:{card:{id:-1,m:[],code:'H'}}; explodeAt(a.x,a.y,bomb.card.lv||1,hero,d,true); d.boom=true; } // 爆弾を踏ませる
       }
     } else S.board[a.y][a.x]={side:'i',card,dir:a.dir||null,held:[]};
   } else if(a.type==='grant'){
@@ -1186,7 +1216,7 @@ function applyAct(a){
   } else if(a.type==='tech'){
     for(const cid of (a.costIds||[])){ const cc=S.hand.splice(handIdx(cid),1)[0]; S.discard.push(cc); L.used++; } S.techUsed.push(a.tech);
     const p=S.board[a.pos[1]][a.pos[0]]; d.x=a.pos[0]; d.y=a.pos[1]; d.tech=a.tech;
-    if(a.tech==='kei') tokensOf(p.card.id).push({m:clone(KNIGHT8),src:'tech'});
+    if(a.tech==='kei') S.leap=p.card.id; // 次の1手は壁を越える
     if(a.tech==='dash'){ if(a.mode==='pierce') S.armed=p.card.id; else S.dash=p.card.id; } // 疾走Lv2は貫通も選べる
     if(a.tech==='sword') swordStrike(p,a.pos,d);
   } else if(a.type==='hero'){
@@ -1205,6 +1235,7 @@ function applyAct(a){
       :(a.pref==='pierce'&&legalTargets(fx,fy).find(t=>t.x===a.x&&t.y===a.y&&t.pierce))||legalTargets(fx,fy).find(t=>t.x===a.x&&t.y===a.y);
     if(mcard){ S.discard.push(takeCard(a.card)); L.used++; d.card=mcard.code; }
     if(S.dash===p.card.id) S.dash=null; // 疾走はどの動きでも1回で終わる
+    if(S.leap===p.card.id) S.leap=null; // 跳躍も1回で終わる
     const end0=S.board[t.y][t.x], itm=end0&&end0.side==='i'?end0:null;
     const tkSrc=t.token!=null?((tokensOf(p.card.id)[t.token]||{}).src):null;
     const stoneHit=!t.pierce&&itm&&itm.card.it==='stone';
@@ -1224,14 +1255,7 @@ function applyAct(a){
     for(const [cx,cy] of t.caps){const st=stealthOf(cx,cy); const r=captureAt(cx,cy,p,{via:t.pierce?'pierce':leapTk?'leap':'move',jump:t.jump,stealth:st}); if(r){ d.caps.push({x:cx,y:cy,...r}); if(r.m) tokensOf(p.card.id).push({m:r.m,src:'cap'}); }}
     // 貫通が踏んだ爆弾：通り道で順に爆発
     d.bomb=[];
-    const explode=(bx,by,lv)=>{ L.bombs++;
-      // 爆風が通る線の上の石垣だけ壊れる（鉄扉は壊れない）
-      const R=bombRays(bx,by,lv), hb=S.H.length+S.V.length;
-      S.H=S.H.filter(k=>!R.bh.has(k)); S.V=S.V.filter(k=>!R.bv.has(k));
-      d.walls=(d.walls||0)+hb-S.H.length-S.V.length;
-      for(const [ax,ay] of R.cells){ const o=S.board[ay][ax]; if(o&&o.side==='e'&&o.card.code!=='K'){ const r=captureAt(ax,ay,p,{via:'bomb'}); d.bomb.push({x:ax,y:ay,...r}); if(r&&r.m) tokensOf(p.card.id).push({m:r.m,src:'cap'}); }}
-      // 爆発の瞬間に生き残っている敵がいれば、音で見つかる
-      };
+    const explode=(bx,by,lv)=>explodeAt(bx,by,lv,p,d);
     for(const [bx,by] of (t.bombs||[])){ const bo=S.board[by][bx]; if(bo&&bo.side==='i'){ S.board[by][bx]=null; explode(bx,by,bo.card.lv||1); } }
     S.board[t.y][t.x]=p; d.pierce=!!t.pierce; d.jump=t.jump;
     if(itm){ d.item=itm.card.it;
@@ -1245,14 +1269,27 @@ function applyAct(a){
     { // 剣持ちの利きに止まると斬られる（取ったときも、空きマスでも）
       const rc=recapturer(S.board,t.x,t.y);
       // シノビは取られない代わりに体力が1減る（剣持ちは動かない）。ほかの駒は取り返される
-      if(rc) S.detected=true; // 剣持ちに反撃された＝見つかった
+      if(rc&&!p.card.turned) S.detected=true; // 剣持ちに反撃された＝見つかった
       if(rc&&p.hero){ if(useShield()) d.blocked=rc; else { S.hp--; S.lost++; d.hit=rc; } }
-      else if(rc){ applyEv(S.board,rc,[t.x,t.y]); S.lost++; delete S.tokens[p.card.id]; if(S.armed===p.card.id) S.armed=null; d.recap=rc; resetRun(); }
+      else if(rc&&!p.card.turned){ applyEv(S.board,rc,[t.x,t.y]); S.lost++; delete S.tokens[p.card.id]; if(S.armed===p.card.id) S.armed=null; d.recap=rc; resetRun(); }
     }
+    // 寝返った駒は、一太刀だけ貸して去る
+    if(p.card.turned&&S.board[t.y][t.x]===p){ S.board[t.y][t.x]=null; delete S.tokens[p.card.id]; if(S.armed===p.card.id) S.armed=null; if(S.dash===p.card.id) S.dash=null; d.left=true; }
   } else if(a.type==='discard'){
     const card=S.hand.splice(handIdx(a.id),1)[0]; S.discard.push(card);
   }
   return d;
+}
+const isBombAt=(x,y)=>{ const o=S.board[y][x]; return !!(o&&o.side==='i'&&o.card.it==='bomb'); };
+const lureBoard=(x,y)=>{ if(!isBombAt(x,y)) return S.board; const b=S.board.map(r=>r.slice()); b[y][x]=null; return b; }; // 爆弾の上にも囮を置ける
+const canTurn=o=>!!(o&&o.side==='e'&&o.card.code!=='K'&&!o.sword); // 密書：王と剣持ちは寝返らない
+// 爆発：爆風が通る線の上の石垣だけ壊れる（鉄扉は壊れない）。王は爆弾では倒れない
+function explodeAt(bx,by,lv,p,d,center){
+  const L=S.log; L.bombs++; d.bomb=d.bomb||[];
+  const R=bombRays(bx,by,lv), hb=S.H.length+S.V.length;
+  S.H=S.H.filter(k=>!R.bh.has(k)); S.V=S.V.filter(k=>!R.bv.has(k));
+  d.walls=(d.walls||0)+hb-S.H.length-S.V.length;
+  for(const [ax,ay] of (center?[[bx,by],...R.cells]:R.cells)){ const o=S.board[ay][ax]; if(o&&o.side==='e'&&o.card.code!=='K'){ const r=captureAt(ax,ay,p,{via:'bomb'}); d.bomb.push({x:ax,y:ay,...r}); if(r&&r.m) tokensOf(p.card.id).push({m:r.m,src:'cap'}); }}
 }
 // 囮・密書に飛びつく敵：そのマスへ動ける敵（王は除く）のうち、いちばん近い敵。同じなら下の段、次に左
 // 剣：動かずに斬る。飛ぶ斬撃（Lv5）は最初に当たった敵まで届く
@@ -1271,27 +1308,25 @@ function swordStrike(p,[x,y],d){
 }
 const kingAt=()=>{ for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const e=S.board[r][c]; if(e&&e.side==='e'&&e.card.code==='K') return [c,r];} return null; };
 // 盾：道具棚にあれば、シノビが斬られるのを1回防ぐ（毎局補充）
-function useShield(){ const c=(S.tools||[]).find(c=>c.it==='shield'); if(!c) return false; takeCard(c.id); return true; }
+function useShield(){ const c=(S.tools||[]).find(c=>c.it==='shield'&&c.left>0); if(!c) return false; takeCard(c.id); return true; }
 // 技の範囲：技を選んでいる間、効くマスを盤に光らせる
 function techPreview(){
   const pd=S.pending, out=new Set(); if(!pd||(pd.kind!=='tcost'&&pd.kind!=='swdir')) return out;
   const [x,y]=pd.pos, p=S.board[y]&&S.board[y][x]; if(!p) return out;
   if(pd.tech==='sword'){
     const lv=techLv('sword'), fly=lv>=SWORD_MAX;
-    const dirs=pd.kind==='swdir'?(lv===1?ORTH:ST8):swordDirs(lv,pd.dir);
+    const dirs=pd.kind==='swdir'||(needsDir(pd)&&!pd.dir)?(lv===1?ORTH:ST8):swordDirs(lv,pd.dir);
     for(const [dx,dy] of dirs){ let cx=x,cy=y; for(let g=0;g<(fly?S.n:1);g++){ const nx=cx+dx,ny=cy+dy; if(!inB(nx,ny)||blocked(cx,cy,dx,dy)) break; cx=nx; cy=ny; out.add(cx+','+cy); if(S.board[ny][nx]) break; } }
   } else if(pd.tech==='dash'&&pd.mode==='pierce'){
     const keep=S.armed; S.armed=p.card.id;
     try{ for(const t of legalTargets(x,y)) for(const [px,py] of (t.pts||[[t.x,t.y]])) if(px!==x||py!==y) out.add(px+','+py); } finally { S.armed=keep; }
-  } else if(pd.tech==='kei'){
-    for(const t of movesOf(S.board,x,y,KNIGHT8,'p')) out.add(t.x+','+t.y);
   }
   return out;
 }
 // そのマスへ動ける敵（王は除く）。近い順、同じなら下・左から
-function lurers(b,x,y,king){ // king：王も来るか（囮は来る、密書は来ない）
+function lurers(b,x,y,king){ // king：囮なら王も剣持ちも来る。密書には、王も剣持ちも来ない
   const out=[];
-  for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const e=b[r][c]; if(!e||e.side!=='e'||(e.card.code==='K'&&!king)) continue;
+  for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const e=b[r][c]; if(!e||e.side!=='e'||(!king&&(e.card.code==='K'||e.sword))) continue;
     if(movesOf(b,c,r,e.card.m,'e').some(t=>t.x===x&&t.y===y)) out.push([c,r]); }
   const key=([c,r])=>Math.max(Math.abs(c-x),Math.abs(r-y))*1000-r*10+c;
   return out.sort((a,b2)=>key(a)-key(b2));
@@ -1331,6 +1366,7 @@ function plan(a){
   S.sel=null; S.pending=null;
   if(a.type==='move') S.selPos=[a.x,a.y];
   else if(a.type==='drop'||a.type==='grant') S.selPos=[a.x,a.y];
+  if(S.selPos&&!(S.board[S.selPos[1]]&&S.board[S.selPos[1]][S.selPos[0]])) S.selPos=heroPos(); // 去った駒の跡は選ばない
   tok(a.type==='move'&&S.log.caps.length?0:1);
   render();
 }
@@ -1359,11 +1395,10 @@ function techGo(k,pos,dir,mode){
   S.pending={kind:'tcost',tech:k,pos,picked:[],dir,mode,dest:null}; tok(1); render();
 }
 // 行き先を選べる技：貫通（疾走Lv2）と跳躍。剣（Lv3まで）は向きのマスを選ぶ
-const isMoveTech=pd=>(pd.tech==='dash'&&pd.mode==='pierce')||pd.tech==='kei';
+const isMoveTech=pd=>pd.tech==='dash'&&pd.mode==='pierce';
 const needsDir=pd=>pd.tech==='sword'&&swordNeedsDir(techLv('sword'));
 function techDests(pd){
   const [x,y]=pd.pos, p=S.board[y]&&S.board[y][x]; if(!p) return [];
-  if(pd.tech==='kei') return movesOf(S.board,x,y,KNIGHT8,'p');
   const keep=S.armed; S.armed=p.card.id; try{ return legalTargets(x,y).filter(t=>t.pierce); } finally { S.armed=keep; }
 }
 // そろったら実行：手札が足りて、向きが決まっていれば。行き先が決まっていれば、そこへ動くところまで
@@ -1380,6 +1415,7 @@ function onHand(id){
   if(allDead()&&S.actions.length){ hintMsg('全滅！　決行で突破'); return; }
   { const c0=getCard(id); if(c0&&c0.kind==='i'&&c0.it==='shield'&&!(S.pending&&S.pending.kind==='tcost')){ hintMsg(`盾は持っているだけで効く（この局あと${c0.left||1}回）`); return; } }
   if(S.pending&&S.pending.kind==='disc'){ if(handIdx(id)>=0) plan({type:'discard',id}); return; }
+  if(S.pending&&S.pending.kind==='icost'){ if(handIdx(id)<0) return; const pd=S.pending; S.pending=null; plan({type:'place',id:pd.id,x:pd.x,y:pd.y,costIds:[id]}); return; }
   if(S.pending&&S.pending.kind==='tcost'){ if(handIdx(id)<0) return; const pd=S.pending;
     if(pd.picked.includes(id)){ pd.picked=pd.picked.filter(x=>x!==id); tok(2); render(); return; }
     if(pd.picked.length>=techCost(pd.tech,pd.mode)){ hintMsg('もう足りている'); return; }
@@ -1429,9 +1465,19 @@ function onCell(x,y){
     S.sel=null; render(); return;
   }
   if(selCard&&selCard.kind==='i'){
+    if(selCard.it==='missive'){
+      if(!canTurn(o)){ hintMsg('寝返らせる敵をタップ（王と剣持ちは来ない）'); return; }
+      if(!S.hand.length){ hintMsg('密書には手札が1枚いる'); return; }
+      S.pending={kind:'icost',id:selCard.id,x,y}; S.sel=null; tok(1); render(); return; }
+    if(selCard.it==='lure'&&isBombAt(x,y)){ const cs=lurers(lureBoard(x,y),x,y,true);
+      if(!cs.length){ hintMsg('ここには誰も来ない'); return; }
+      if(cs.length>1){ S.pending={kind:'tgt',id:selCard.id,it:'lure',x,y,cands:cs}; tok(1); render(); return; }
+      plan({type:'place',id:selCard.id,x,y}); return; }
     if(!o){ if(selCard.it==='arrow'){ S.pending={kind:'dir',id:selCard.id,x,y}; render(); return; }
       if(selCard.it==='mirror'){ S.pending={kind:'dir',id:selCard.id,x,y,mirror:true}; render(); return; }
-      const cs=selCard.it==='lure'||selCard.it==='missive'?lurers(S.board,x,y,selCard.it==='lure'):selCard.it==='magnet'?magnetCands(S.board,x,y).map(c=>c.from):[];
+      const cs=selCard.it==='lure'?lurers(S.board,x,y,true):selCard.it==='magnet'?magnetCands(S.board,x,y).map(c=>c.from):[];
+      if(selCard.it==='magnet'&&!cs.length){ hintMsg('ここでは何も引き寄せられない'); return; }
+      if(selCard.it==='lure'&&!cs.length){ hintMsg('ここには誰も来ない'); return; }
       if(cs.length>1){ S.pending={kind:'tgt',id:selCard.id,it:selCard.it,x,y,cands:cs}; tok(1); render(); return; }
       plan({type:'place',id:selCard.id,x,y}); return; }
   }
@@ -1519,8 +1565,10 @@ async function animAct(d,i){
   if(d.type==='drop'){ render(); dropIn(d.x,d.y); impact(d.x,d.y,3,false); await sleep(320*sp); return; }
   if(d.type==='place'){ render();
     if(d.it==='lure'||d.it==='missive'){
-      if(d.lured){ const fp=cellCenter(d.lured.from[0],d.lured.from[1]); slideIn(d.lured.to[0],d.lured.to[1],fp,240); await sleep(160);
-        impact(d.x,d.y,5,false); stamp(d.x,d.y,d.it==='lure'?'釣':'寝'); floatText(d.x,d.y,d.it==='lure'?'飛びついた。剣を失った':'寝返った','k',1); }
+      if(d.it==='missive'){ impact(d.x,d.y,5,false); stamp(d.x,d.y,'寝'); floatText(d.x,d.y,'寝返った','k',1); }
+      else if(d.lured){ const fp=cellCenter(d.lured.from[0],d.lured.from[1]); slideIn(d.lured.to[0],d.lured.to[1],fp,240); await sleep(160);
+        impact(d.x,d.y,5,false); stamp(d.x,d.y,'釣'); floatText(d.x,d.y,'飛びついた','k',1);
+        if(d.boom){ await sleep(Math.max(160,320*sp)); impact(d.x,d.y,12+d.bomb.length,true); flash(); stamp(d.x,d.y,'爆'); for(const c of d.bomb){ addLive(c.v*CHIP_PER_V,0); floatText(c.x,c.y,`+${c.v*CHIP_PER_V}`,'c'); } if(d.bomb.length) chime(S.log.caps.length); } }
       else { floatText(d.x,d.y,'誰も来なかった','m'); }
       tok(0); await sleep(Math.max(240,520*sp)); return; }
     if(d.it==='magnet'){ stampAt(innerWidth/2,innerHeight*.5,'磁'); for(const pl of d.pulls){ slideIn(pl.to[0],pl.to[1],cellCenter(pl.from[0],pl.from[1]),220); } tok(0); await sleep(Math.max(200,420*sp)); return; }
@@ -1567,6 +1615,7 @@ async function animAct(d,i){
     if(d.blocked){ stamp(d.x,d.y,'盾'); floatText(d.x,d.y,'盾で防いだ','c',1); await sleep(Math.max(240,460*sp)); }
     if(d.hit){ impact(d.x,d.y,9,false); shake(6); stamp(d.x,d.y,'発'); floatText(d.x,d.y,`見つかった 体力${S.hp}`,'m',1); await sleep(Math.max(260,520*sp)); }
     if(d.recap){ const fp=cellCenter(d.recap[0],d.recap[1]); render(); slideIn(d.x,d.y,fp,200); await sleep(160); impact(d.x,d.y,7,false); floatText(d.x,d.y,'取り返された','m',1); stamp(d.x,d.y,'紐'); await sleep(Math.max(260,520*sp)); }
+    if(d.left){ floatText(d.x,d.y,'去った','c',1); await sleep(Math.max(200,380*sp)); }
     return;
   }
 }
@@ -1624,7 +1673,7 @@ function kyokuClear(){
   S.phase='over'; busy=false;
   const f=FACES[S.face], last=S.face===FACES.length-1;
   const sl=starList(), stars=sl.filter(x=>x.on).length;
-  const base=f.boss==='big'?5:f.boss==='mid'?4:3, starG=stars*STAR_GOLD, interest=Math.min(5,Math.floor(S.gold/5));
+  const base=BAL.clear[f.boss||'normal']??BAL.clear.normal, starG=stars*BAL.star, interest=Math.min(BAL.interestMax,Math.floor(S.gold/BAL.interestPer));
   const sg=scoreGold(S.faceScore,S.par);
   const heal=f.boss&&S.hp<S.hpMax?1:0;
   const total=base+starG+sg+interest;
@@ -1645,7 +1694,7 @@ function kyokuClear(){
     <button class="btn" id="mSavePz" type="button" style="width:100%;margin-bottom:6px">パズルとして保存</button>
     <button class="btn pri" id="mNext" type="button" style="width:100%;margin-bottom:6px">${last?'結果を見る':'進む'}</button>
 `);
-  $('#mNext').onclick=()=>{ S.prevClear=null; S.gold+=total; S.hp+=heal; if(f.boss&&S.slots<SLOTS_MAX) S.slots++; bachin(6); S.rewardLeft=f.boss?2:1; last?victory():rewardPicker(); };
+  $('#mNext').onclick=()=>{ S.prevClear=null; S.econ=S.econ||[]; S.econ.push({f:S.face,earn:total,spend:0}); S.gold+=total; S.hp+=heal; if(f.boss&&S.slots<SLOTS_MAX) S.slots++; bachin(6); S.rewardLeft=f.boss?2:1; last?victory():rewardPicker(); };
   $('#mRpPlay').onclick=()=>replayOpen(false);
   $('#mSavePz').onclick=e=>savePuzzleNow(e.currentTarget);
   // もう一度遊ぶ：この結果は取っておく。いつでも「前の結果で進む」で戻れる
@@ -1729,7 +1778,7 @@ function rewardPicker(){
     ${opts.map((c,i)=>c.kind==='enh'?optHTML({kind:'p',code:'x',m:c.sh.m},`付与：${c.sh.nm}`,'持ち物の駒1枚に付ける',`data-i="${i}"${sel===i?' aria-pressed="true" style="outline:3px solid var(--gold)"':''}`):optHTML(c,cardName(c),`新しい駒・${tierLabel(T[c.code].tier)}`,`data-i="${i}"${sel===i?' aria-pressed="true" style="outline:3px solid var(--gold)"':''}`)).join('')}
     <button class="btn pri" id="mTake" type="button" style="width:100%;margin-bottom:6px" ${sel==null?'disabled':''}>${sel==null?'選ぶ':opts[sel].kind==='enh'?'付ける駒を選ぶ':full?'入れ替える札を選ぶ':'これにする'}</button>
     <button class="btn" id="mBag2" type="button" style="width:100%;margin-bottom:6px">持ち物を見る</button>
-    <button class="btn" id="mSkip" type="button" style="width:100%">見送る（+${SKIP_GOLD}金）</button>`);
+    <button class="btn" id="mSkip" type="button" style="width:100%">見送る（+${BAL.skip}金）</button>`);
   const done=()=>{ S.rewardOpts=null; S.rewardSel=null; S.rewardLeft=(S.rewardLeft||1)-1; if(S.rewardLeft>0){ rewardPicker(); return; } genShop(); renderShop(); };
   document.querySelectorAll('.opt[data-i]').forEach(o=>o.onclick=()=>{ S.rewardSel=+o.dataset.i; tok(1); rewardPicker(); });
   $('#mBag2').onclick=()=>{ openModal(`<h2>いまの持ち物</h2><p>${S.bag.length}/${S.slots}</p>${S.bag.map(b=>`<div class="opt" style="cursor:default">${cardSVG(b)}<span class="t"><b>${cardName(b)}</b>${cardDesc(b)}</span></div>`).join('')}<button class="btn pri" id="mBk" type="button" style="width:100%">戻る</button>`); $('#mBk').onclick=rewardPicker; };
@@ -1741,7 +1790,7 @@ function rewardPicker(){
       <button class="btn" id="mBack2" type="button" style="width:100%">戻る</button>`);
     document.querySelectorAll('.opt[data-r]').forEach(r=>r.onclick=()=>{ S.bag=S.bag.filter(b=>b.id!==+r.dataset.r); S.bag.push(c); bachin(4); done(); });
     $('#mBack2').onclick=rewardPicker; };
-  $('#mSkip').onclick=()=>{S.gold+=SKIP_GOLD; bachin(3); done();};
+  $('#mSkip').onclick=()=>{S.gold+=BAL.skip; const e=(S.econ||[]).slice(-1)[0]; if(e) e.earn+=BAL.skip; bachin(3); done();};
 }
 const tierLabel=t=>['','Common','Rare','Epic','Legendary','Mythic'][t]||'';
 function optHTML(card,title,sub,attr){
@@ -1809,6 +1858,20 @@ function techItems(n,keep){
   for(const it of shuffle(c)){ if(out.length>=n) break; if(have.has(key(it))) continue; have.add(key(it)); out.push(it); }
   return out;
 }
+function priceOf(it){
+  switch(it.type){
+    case 'fan': return BAL.fan[FANS[it.j].kind==='rule'?'rule':FANS[it.j].kind==='mul'?'mul':'add']+BAL.fanStep*S.fans.length;
+    case 'card': return it.card.kind==='i'?(BAL.item[it.card.it]??it.price)+BAL.itemStep*shelfCount():(BAL.piece[T[it.card.code].tier]??it.price)+BAL.pieceStep*S.bag.length;
+    case 'tech': return BAL.tech+BAL.techStep*(S.techs||[]).length;
+    case 'techup': return techUpPrice(techLv(it.k));
+    case 'techmore': return techMorePrice(techN(it.k));
+    case 'tslot': return tslotPrice();
+    case 'heal': return BAL.heal; case 'slot': return BAL.slot; case 'shelf': return BAL.shelf; case 'book': return BAL.book;
+    case 'up': if(it.kind==='bomb'){ const b=S.shelf.filter(c=>c.it==='bomb'&&(c.lv||1)<BOMB_MAX); return b.length?bombUpPrice(Math.min(...b.map(c=>c.lv||1))):it.price; } return BAL.dirUp;
+  }
+  return it.price;
+}
+function repriceShop(){ (S.shop||[]).forEach(it=>{ if(!it.sold) it.price=priceOf(it); }); }
 function fillShop(){
   const kept=(S.shop||[]).filter(it=>it.locked&&!it.sold);
   const ex=new Set(kept.filter(it=>it.type==='fan').map(it=>it.j));
@@ -1816,11 +1879,11 @@ function fillShop(){
   while(items.length<SHOP_SLOTS) items.push(freshItem(ex));
   const keptTech=kept.filter(isTechIt).slice(0,2);
   items.push(...keptTech,...techItems(2-keptTech.length,keptTech));
-  S.shop=items;
+  S.shop=items; repriceShop();
 }
 // 茶屋に入った時点の状態。「今回の買い物をリセット」でここに戻る
 function shopMark(){ S.shopEntry=clone({gold:S.gold,techs:S.techs||[],techLv:S.techLv||{},techN:S.techN||{},techSlots:S.techSlots,bag:S.bag,shelf:S.shelf,fans:S.fans,levels:S.levels,slots:S.slots,shelfMax:S.shelfMax,hp:S.hp,shop:S.shop,reroll:S.reroll}); }
-function genShop(){ S.reroll=2; fillShop(); S.shopEntry=null;
+function genShop(){ S.reroll=BAL.rerollStart; fillShop(); S.shopEntry=null;
   // 第五面（城）までは、城を崩す道具が茶屋に必ず1つ並ぶ
   if(S.face<5&&!S.shop.some(it=>it.type==='card'&&it.card.kind==='i'&&(it.card.it==='bomb'||it.card.it==='lure'))){ const it=['bomb','lure'][rand(2)]; S.shop[SHOP_SLOTS-1]={type:'card',card:mkI(it),price:ITEM_PRICE[it]}; }
   // 最初の茶屋は、爆弾・矢印・囮が必ず並ぶ（ここで買った道具が方向付けになる）
@@ -1845,6 +1908,7 @@ function itemInfo(it){
 const sellFan=j=>Math.floor(fanPrice(j)/2);
 const sellCard=c=>c.kind!=='p'?2:Math.max(1,Math.floor(PRICE[T[c.code].tier]/2));
 function renderShop(){
+  repriceShop();
   if(S.phase!=='shop'||!S.shopEntry) { S.phase='shop'; shopMark(); }
   S.phase='shop'; saveRun('shop');
   const cards=S.shop.map((it,i)=>{
@@ -1873,9 +1937,11 @@ function renderShop(){
   $('#mReroll').onclick=()=>{ if(S.gold<S.reroll) return; S.gold-=S.reroll; S.reroll++; fillShop(); tok(1); renderShop(); };
   $('#mBag').onclick=bagSell;
   $('#mUndoShop').onclick=()=>{ if(!S.shopEntry) return; Object.assign(S,clone(S.shopEntry)); tok(2); renderShop(); };
-  $('#mGo').onclick=()=>{closeModal(); S.shopEntry=null; if(S.retry){ S.retry=false; S.kyoku++; startKyoku(); } else { S.face++; startFace(); } };
+  $('#mGo').onclick=()=>{ const e=(S.econ||[]).slice(-1)[0]; if(e&&S.shopEntry){ e.spend+=Math.max(0,S.shopEntry.gold-S.gold); e.hold={gold:S.gold,tech:techTotal(),item:shelfCount(),fan:S.fans.length,bag:S.bag.length}; }
+    closeModal(); S.shopEntry=null; if(S.retry){ S.retry=false; S.kyoku++; startKyoku(); } else { S.face++; startFace(); } };
 }
 function buy(i){
+  repriceShop();
   const it=S.shop[i]; if(!it||it.sold||S.gold<it.price) return;
   if(it.type==='fan'&&S.fans.length>=MAX_FANS) return;
   if(it.type==='up') return upPicker(i);
@@ -1912,7 +1978,7 @@ function upPicker(i){
   $('#mBack').onclick=renderShop;
 }
 function bagSell(){
-  const min=6;
+  const min=3; // 持ち物は3枚まで減らせる
   openModal(`<h2>持ち物</h2><p>${S.bag.length}/${S.slots}枚。毎局すべて手元にある。売ると外れる（最低${min}枚）。</p>
     ${S.bag.map(c=>`<div class="opt" style="cursor:default">${cardSVG(c)}<span class="t"><b>${cardName(c)}</b>${cardDesc(c)}</span><button class="sellB" type="button" data-id="${c.id}" ${S.bag.length<=min?'disabled':''}>売る +${sellCard(c)}金</button></div>`).join('')}
     <button class="btn pri" id="mBack" type="button" style="width:100%">茶屋に戻る</button>`);
@@ -1982,6 +2048,9 @@ function devPanel(){
     <div style="display:flex;gap:4px;margin:6px 0">${sel('dvCode',codes,k=>T[k].name+'（'+k+'）')}<button class="btn" type="button" data-dv="addP">駒札を足す</button></div>
     <h3 class="sh">技</h3><p style="font-size:.8rem">${(S.techs||[]).map(k=>TECHS[k].name+(TECHS[k].maxLv?' Lv'+techLv(k):'')+'×'+techN(k)).join('、')||'なし'}</p>
     <div style="display:flex;gap:4px;margin:6px 0">${sel('dvTech',Object.keys(TECHS),k=>TECHS[k].name)}<button class="btn" type="button" data-dv="addT">技を覚える／+1回</button><button class="btn" type="button" data-dv="swLv">選んだ技Lv+</button><button class="btn" type="button" data-dv="clrT">全部忘れる</button></div>
+    <h3 class="sh">お金の記録</h3>${(S.econ||[]).length?`<div style="overflow-x:auto"><table class="econ"><tr><th>面</th><th>稼ぎ</th><th>使い</th><th>残</th><th>技</th><th>道具</th><th>巻物</th><th>札</th></tr>${S.econ.map(e=>`<tr><td>${faceTitle(e.f).replace('第','').replace(' 第','-')}</td><td>+${e.earn}</td><td>${e.spend?'−'+e.spend:''}</td><td>${e.hold?e.hold.gold:''}</td><td>${e.hold?e.hold.tech:''}</td><td>${e.hold?e.hold.item:''}</td><td>${e.hold?e.hold.fan:''}</td><td>${e.hold?e.hold.bag:''}</td></tr>`).join('')}</table></div>`:'<p style="font-size:.8rem;opacity:.6">まだない（面を突破すると記録される）</p>'}
+    <h3 class="sh">調整表</h3><textarea id="dvBal" style="width:100%;height:9em;font-size:.7rem;font-family:monospace">${JSON.stringify(BAL,null,1)}</textarea>
+    <div style="display:flex;gap:4px;margin:4px 0 8px"><button class="btn" type="button" data-dv="balSet">反映して保存</button><button class="btn" type="button" data-dv="balReset">初期値に戻す</button></div>
     <h3 class="sh">解放</h3><button class="btn" type="button" data-dv="unlockAll">${META.devUnlock?'全部解放を戻す':'全部解放する（試作用）'}</button>
     <h3 class="sh">道具棚</h3>${S.shelf.map((e,i)=>`<div style="display:flex;gap:4px;align-items:center;margin:2px 0"><span style="flex:1;font-size:.85rem">${ITEMS[e.it].name}×${e.n}${e.it==='bomb'?`　Lv${e.lv||1}`:''}</span><button class="btn" type="button" data-sh="${i}:-">−</button><button class="btn" type="button" data-sh="${i}:+">＋</button>${e.it==='bomb'?`<button class="btn" type="button" data-sh="${i}:lv">Lv+</button>`:''}</div>`).join('')||'<p style="font-size:.8rem">空</p>'}
     <div style="display:flex;gap:4px;margin:6px 0">${sel('dvIt',its,k=>ITEMS[k].name)}<button class="btn" type="button" data-dv="addI">道具を足す</button></div>
@@ -2004,6 +2073,8 @@ function devPanel(){
     if(k==='addT'){ const t=$('#dvTech').value; S.techs=S.techs||[]; if(!S.techs.includes(t)) S.techs.push(t); else S.techN={...(S.techN||{}),[t]:techN(t)+1}; if(techTotal()>(S.techSlots||TECH_SLOTS0)) S.techSlots=techTotal(); }
     if(k==='swLv'){ const t=$('#dvTech').value; if(TECHS[t].maxLv) S.techLv={...(S.techLv||{}),[t]:Math.min(TECHS[t].maxLv,techLv(t)+1)}; }
     if(k==='clrT'){ S.techs=[]; S.techLv={}; S.techN={}; }
+    if(k==='balSet'){ try{ BAL=Object.assign(clone0(BAL0),JSON.parse($('#dvBal').value)); localStorage.setItem('shinobiRL.bal',JSON.stringify(BAL)); hintMsg('調整表を反映した'); }catch(e){ hintMsg('調整表が読めない（JSONの形を確認）'); } }
+    if(k==='balReset'){ BAL=clone0(BAL0); try{ localStorage.removeItem('shinobiRL.bal'); }catch(e){} }
     if(k==='unlockAll'){ META.devUnlock=!META.devUnlock; saveMeta(META); }
     re(); });
   document.querySelectorAll('[data-lm]').forEach(b=>b.onclick=()=>{ const k=b.dataset.lm;
@@ -2099,9 +2170,11 @@ function render(){
   // 矢印に乗る手は、矢印のマスも光らせる（タップすると滑った先へ動く）
   for(const t of [...tg.values()]) if(t.arrows&&t.arrows.length){ const k=t.arrows[0].join(','); if(!tg.has(k)) tg.set(k,t); }
   const lureMap=new Set();
-  if(play&&selCard&&selCard.kind==='i'&&(selCard.it==='lure'||selCard.it==='missive')) for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++) if(!S.board[r][c]&&lurers(S.board,c,r,selCard.it==='lure').length) lureMap.add(c+','+r);
+  if(play&&selCard&&selCard.kind==='i'&&selCard.it==='lure') for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){ const o=S.board[r][c]; if((!o||isBombAt(c,r))&&lurers(lureBoard(c,r),c,r,true).length) lureMap.add(c+','+r); }
+  if(play&&selCard&&selCard.kind==='i'&&selCard.it==='magnet') for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++) if(!S.board[r][c]&&magnetCands(S.board,c,r).length) lureMap.add(c+','+r);
+  if(play&&selCard&&selCard.kind==='i'&&selCard.it==='missive') for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++) if(canTurn(S.board[r][c])) lureMap.add(c+','+r);
   const tprev=play?techPreview():new Set();
-  const tdest=new Set(play&&S.pending&&S.pending.kind==='tcost'&&isMoveTech(S.pending)?techDests(S.pending).map(t=>t.x+','+t.y):[]);
+  const tdest=new Set(play&&S.pending&&S.pending.kind==='tcost'?(isMoveTech(S.pending)?techDests(S.pending).map(t=>t.x+','+t.y):needsDir(S.pending)&&!S.pending.dir?(techLv('sword')===1?ORTH:ST8).map(([a,b])=>[S.pending.pos[0]+a,S.pending.pos[1]+b]).filter(([a,b])=>inB(a,b)).map(([a,b])=>a+','+b):[]):[]);
   // 討つと斬られる敵（剣持ちに守られている）にも、割れたハートを付ける
   const guarded=new Set(); if(play) for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){ const e=S.board[r][c]; if(!e||e.side!=='e') continue; const b2=S.board.map(row=>row.slice()); b2[r][c]=null; if(recapturer(b2,c,r)) guarded.add(c+','+r); }
   const swordZone=new Set(); if(noHero) for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){ const e=S.board[r][c]; if(e&&e.side==='e'&&e.sword) movesOf(S.board,c,r,e.card.m,'e').forEach(t=>swordZone.add(t.x+','+t.y)); }
@@ -2115,7 +2188,9 @@ function render(){
     if(S.pending&&S.pending.kind==='tgt'){ if(S.pending.cands.some(([cx,cy])=>cx===c&&cy===r)) cls.push('tgtOk'); if(S.pending.x===c&&S.pending.y===r) cls.push('selp'); }
     if(noHero&&!o&&!(S.rule==='hazama'&&r<S.n-2)) cls.push('dz');
     if(noHero&&!o&&seen.has(k)) cls.push('seen');
-    if(play&&selCard&&selCard.kind==='i'&&!o){ cls.push('dz'); if((selCard.it==='lure'||selCard.it==='missive')&&lureMap.has(k)) cls.push('lureOk'); }
+    if(play&&selCard&&selCard.kind==='i'&&!o&&selCard.it!=='missive'){ cls.push('dz'); if((selCard.it==='lure'||selCard.it==='magnet')&&lureMap.has(k)) cls.push('lureOk'); }
+    if(play&&selCard&&selCard.kind==='i'&&o&&lureMap.has(k)) cls.push(selCard.it==='missive'?'tgtOk':'lureOk');
+    if(S.pending&&S.pending.kind==='icost'&&S.pending.x===c&&S.pending.y===r) cls.push('tgtOk');
     if(S.pending&&S.pending.kind==='dir'&&S.pending.x===c&&S.pending.y===r) cls.push('selp');
     const t=tg.get(k); if(t){cls.push(t.caps.length?'tg':'mv'); if(t.caps.length>1) cls.push('multi'); if(t.token!=null) cls.push('viaTk'); if(t.danger) cls.push('danger');}
     if(S.selPos&&S.selPos[0]===c&&S.selPos[1]===r) cls.push('selp');
@@ -2140,16 +2215,21 @@ function render(){
   $('#board').innerHTML=h;
 
   const burnMode=!!S.pending;
-  $('#tray').innerHTML=S.hand.map(c=>{
+  $('#tray').innerHTML=(S.hand.map(c=>{
     const sel=S.sel===c.id||!!(S.pending&&S.pending.picked&&S.pending.picked.includes(c.id));
-    const canBurn=burnMode&&S.pending.kind==='tcost';
+    const canBurn=burnMode&&(S.pending.kind==='tcost'||S.pending.kind==='icost');
     return `<button class="tp${sel?' sel':''}${canBurn?' burn':''}" data-id="${c.id}" type="button" aria-label="${cardName(c)}">${cardSVG(c)}</button>`;
-  }).join('')||'<span style="color:var(--muted);font-size:.85rem;padding:12px">手札なし</span>';
+  }).join('')+(play?S.discard.map(c=>`<span class="tp usedC" aria-label="使った札">${cardSVG(c)}</span>`).join(''):''))||'<span style="color:var(--muted);font-size:.85rem;padding:12px">手札なし</span>';
   $('#handHead').textContent=`持ち物 ${S.hand.length}枚（毎局すべて使える）`;
   $('#handInfo').innerHTML=`<button class="iconBtn" id="bagBtn" type="button">使った札 ${S.discard.length}</button>`;
   $('#bagBtn').onclick=()=>bagView(null);
   // 道具棚：毎局すべて使える。使った道具はこの局のあいだ棚から消える
-  $('#dai').innerHTML=(S.shelf.length?`<span class="daiLb">道具棚（毎局補充・右下は残り回数）</span>${(S.tools||[]).map(c=>`<button class="tp tool${S.sel===c.id?' sel':''}" data-id="${c.id}" type="button" aria-label="${cardName(c)} 残り${c.left||1}">${cardSVG(c)}<span class="cnt">${c.left||1}</span></button>`).join('')}`:'')
+  $('#dai').innerHTML=((S.tools||[]).length?`<span class="daiLb">道具棚（毎局補充）</span>${(S.tools||[]).map(c=>Array.from({length:c.max||c.left||1},(_,n)=>n<(c.left||0)
+      ?`<button class="tp tool${S.sel===c.id?' sel':''}" data-id="${c.id}" type="button" aria-label="${cardName(c)}">${cardSVG(c)}</button>`
+      :`<span class="tp tool usedC" aria-label="${cardName(c)}（使った）">${cardSVG(c)}</span>`).join('')).join('')}`:'')
+    +((S.techs||[]).length?`<span class="daiLb">技（右下は捨てる手札の枚数）</span>${S.techs.map(k=>Array.from({length:techN(k)},(_,n)=>n<techLeft(k)
+      ?`<button class="tp tool tech${S.pending&&S.pending.tech===k?' sel':''}" data-tech="${k}" type="button" aria-label="${TECHS[k].name}">${techSVG(k)}<span class="cnt">${costBadge(k)}</span>${TECHS[k].maxLv?`<span class="cnt lv">Lv${techLv(k)}</span>`:''}</button>`
+      :`<span class="tp tool tech usedC" aria-label="${TECHS[k].name}（使った）">${techSVG(k)}</span>`).join('')).join('')}`:'');
     +((S.techs||[]).length?`<span class="daiLb">技（右上は残り回数・右下は捨てる手札の枚数）</span>${S.techs.map(k=>`<button class="tp tool tech${S.pending&&S.pending.tech===k?' sel':''}" data-tech="${k}" type="button" aria-label="${TECHS[k].name} 残り${techLeft(k)}回"${techLeft(k)<=0?' style="opacity:.35"':''}>${techSVG(k)}<span class="cnt use">${techLeft(k)}</span><span class="cnt">${costBadge(k)}</span>${TECHS[k].maxLv?`<span class="cnt lv">Lv${techLv(k)}</span>`:''}</button>`).join('')}`:'');
   if(false) $('#dai').innerHTML=S.dai.length?`<span class="daiLb">駒台（次の手番で手札へ）</span>${S.dai.map(c=>`<span class="tp mini" data-id="${c.id}">${cardSVG(c)}</span>`).join('')}`:(S.overflow&&play?`<span class="daiLb">手札が${HAND_MAX}枚を超えた分、${S.overflow}枚を捨て札にした</span>`:'');
 
@@ -2163,6 +2243,7 @@ function render(){
   else if(S.pending&&S.pending.kind==='dir') info=`<div class="txt"><b>矢印の向きを選ぶ</b><div class="dirPad">${['NW','N','NE','W','','E','SW','S','SE'].map(d=>d?`<button class="dirB" type="button" data-d="${d}">${ARW[d]}</button>`:'<span></span>').join('')}</div></div>`;
   else if(S.pending&&S.pending.kind==='swdir'){ const lv=techLv('sword'); info=`<div class="infoPz">${techSVG('sword')}</div><div class="txt"><b>剣の向きを選ぶ</b><div class="dirPad">${['NW','N','NE','W','','E','SW','S','SE'].map(d=>d?`<button class="swB dirB" type="button" data-d="${d}" ${lv===1&&d.length>1?'disabled':''}>${ARW[d]}</button>`:'<span></span>').join('')}</div></div>`; }
   else if(S.pending&&S.pending.kind==='dmode') info=`<div class="infoPz">${techSVG('dash')}</div><div class="txt"><b>疾走か貫通かを選ぶ</b><div style="display:flex;gap:6px;margin:6px 0"><button class="btn dmB" type="button" data-m="dash" style="flex:1">疾走（0枚）<br><small>止まって動きを奪う</small></button><button class="btn dmB" type="button" data-m="pierce" style="flex:1">貫通（1枚）<br><small>突き抜けて全部討つ</small></button></div></div>`;
+  else if(S.pending&&S.pending.kind==='icost') info=`<div class="txt"><b>密書：捨てる札を1枚選ぶ</b><br>選んだ敵がその場で寝返る。ほかのマスをタップでやめる</div>`;
   else if(S.pending&&S.pending.kind==='tgt') info=`<div class="txt"><b>${ITEMS[S.pending.it].name}：狙う敵を選ぶ</b></div>`;
   else if(selCard&&selCard.kind==='i') info=`<div class="infoPz">${cardSVG(selCard)}</div><div class="txt"><b>${cardName(selCard)}</b>${selCard.it==='bomb'?`（範囲：${BOMB_LV[selCard.lv||1]}）`:''}<br>${ITEMS[selCard.it].desc}${selCard.tool?`　残り${selCard.left||1}回`:''}</div>`;
   else if(S.pending&&S.pending.kind==='tcost') info=`<div class="infoPz">${techSVG(S.pending.tech)}</div><div class="txt"><b>${S.pending.mode==='pierce'?'貫通':TECHS[S.pending.tech].name}</b><br>${needsDir(S.pending)?(S.pending.dir?'✓ 向き':'・向きのマスをタップ'):isMoveTech(S.pending)?(S.pending.dest?'✓ 行き先':'・行き先をタップ（あとでもいい）'):''}${needsDir(S.pending)||isMoveTech(S.pending)?'<br>':''}${S.pending.picked.length>=techCost(S.pending.tech,S.pending.mode)?'✓ 捨てる札':`・捨てる札を選ぶ（${S.pending.picked.length}/${techCost(S.pending.tech,S.pending.mode)}）`}<br><small>${techDesc(S.pending.tech)}</small></div>`;
@@ -2340,7 +2421,7 @@ function showRules(first){
     <li><b>駒札</b>：シノビをその動きで1回動かす。</li>
     <li><b>奪う</b>：討った敵の動きを1回使える。技や爆弾で倒すと奪えない。</li>
     <li>${HB}<b>割れたハート</b>：斬られるマス。王と剣持ちの利きに現れたり、剣持ちの利きに止まったりすると体力−1。</li>
-    <li><b>壁</b>：石垣は爆弾で壊せる。第二幕からの鉄扉は、跳ぶしか越えられない（爆弾でも壊れない）。</li>
+    <li><b>壁</b>：石垣は爆弾で壊せる。第二幕からの鉄扉は、跳ぶ動きか技「跳躍」でしか越えられない（爆弾でも壊れない）。</li>
     <li><b>道具</b>：毎局補充。<b>技</b>：使うと手札を捨てる。<b>巻物</b>：持つだけで効く。青い枠は「掟破り」。</li>
     <li><b>★3つ</b>：全滅・無傷（斬られない）・王が最後（ほかを全部討ってから、王を討つ）。★はお金になる。点数もお金になる。</li>
     <li><b>体力${HP0}</b>：0でもまだ戦える。0から斬られると倒れる。</li>
