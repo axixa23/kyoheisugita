@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>シノビ（仮題） 試作 v90</title>
+<title>シノビ（仮題） 試作 v92</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -495,7 +495,7 @@ const ITEM_TAG={shuriken:'',bomb:'爆',arrow:'筆',stone:'筆',missive:'寝',lur
 const TECHS={
   kei:{name:'跳躍',k:'跳',desc:'L字に跳ぶ動き（8方向）を1回得る。壁も駒も跳び越える'},
   dash:{name:'疾走',k:'走',maxLv:2,lvs:['','疾走','疾走／貫通'],desc:'次の1手が、どこまでも進む。修行すると「貫通」も選べる：壁を越え、通り道の敵を全部討つ'},
-  bunshin:{name:'分身',k:'影',desc:'シノビの隣の空きマスに分身を出す。分身はシノビの黒い点を写し、1回動いたら消える'},
+  bunshin:{name:'分身',k:'影',desc:'シノビの隣の空きマスに分身を出す。分身はシノビの次の1手と同じ動きを1回して、すぐ消える。爆弾を代わりに踏める。疾走・貫通・跳躍もまねる。分身が討った敵の動きは奪えない'},
   kawari:{name:'変わり身',k:'替',desc:'今いるマスに印を残す。あとで1回、シノビはその印へ戻れる（一筆は途切れない）'},
   sword:{name:'剣',k:'剣',maxLv:5,lvs:['','十字の1方向','8方向の1方向','3方向','全方向','飛ぶ斬撃'],desc:'動かずに、隣の敵を斬る。王も斬れる'},
 };
@@ -859,7 +859,7 @@ function startPuzzleKyoku(){
   S.hand=(P.hand||[]).map(h=>{ const c=mkP(h.k); if(h.m){ c.m=clone(h.m); c.custom=true; } if(h.mv) c.moves=h.mv; if(h.v) c.v=h.v; if(h.g) c.g=h.g; return c; });
   S.bag=clone(S.hand); S.hp=P.hp??HP0; S.faceScore=0;
   S.tokens={}; S.ikkou=false; S.kyokuStartScore=0; S.discard=[];
-  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.kawari=null; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
+  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.kawari=null; S.shadow=[]; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
   S.enemiesInit=S.board.flat().filter(o=>o&&o.side==='e').length;
   S.sel=null; S.selPos=null; S.pending=null; S.armed=null; S.phase='play';
   beginTurn();
@@ -921,7 +921,7 @@ const fixedStars=()=>Object.values(META.stars).reduce((a,b)=>a+b,0);
 const rtaRec=c=>{ const b=META.rtaBest&&typeof META.rtaBest==='object'?META.rtaBest[c]:(c==='fixed'?META.rtaBest:0); return b?`記録 ${fmtTime(b)}`:'記録 まだ'; };
 function showTitle(){
   const d=loadRun(), N=ACTS*PER_ACT, best=k=>META.best[k]<0?'まだ':META.best[k]>=N-1&&META.clears[k]?'制覇':faceTitle(META.best[k])+'まで';
-  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v90</p></div>
+  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v92</p></div>
     ${d?`<button class="btn pri" id="tCont" type="button" style="width:100%;margin-bottom:6px">つづきから<br><small>${d.S.rta?`RTA ${d.S.rtaCat==='random'?'ランダム':'固定'}シード`:MODE_NM[d.S.mode]||'固定'}・${faceTitle(d.S.face)}${d.S.resumeAt==='kyoku'?'':(d.S.retry?'（出直し前）':'を突破したところ')}</small></button>
     <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:6px">最初から（${d.S.rta?`RTA ${d.S.rtaCat==='random'?'ランダム':'固定'}シード`:MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
     ${ckptButtons()}<div style="height:6px"></div>
@@ -996,7 +996,7 @@ function startKyoku(){
   // ランダムの陣で出だしがなければ、作り直す
   if(GEN[S.face]&&!layoutOK()&&(S.regen=(S.regen||0)+1)<30){ Object.assign(FACES[S.face],genLayout(S.face,S.layoutSeed,100+S.regen)); return startKyoku(); }
   S.regen=0;
-  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.kawari=null; S.techs=S.techs||[]; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
+  S.detected=false; S.hpStart=S.hp; S.techUsed=[]; S.dash=null; S.leap=null; S.kawari=null; S.shadow=[]; S.techs=S.techs||[]; S.dai=[]; S.lost=0; S.turnNo=0; S.kingTaken=false; S.kingLast=false;
   S.enemiesInit=S.board.flat().filter(o=>o&&o.side==='e').length;
   S.sel=null; S.selPos=null; S.pending=null; S.armed=null; S.phase='play';
   beginTurn();
@@ -1176,7 +1176,7 @@ function calc(){
 
 
 /* ===== 計画：操作はすぐ盤に反映するが、演出なし。実行で頭から再生する ===== */
-const SNAPKEYS=['hp','detected','techUsed','dash','board','hand','tools','discard','dai','tokens','log','armed','H','V','HI','VI','lost','kingTaken','kingLast','leap','kawari','freeUsed','lastTurn'];
+const SNAPKEYS=['hp','detected','techUsed','dash','board','hand','tools','discard','dai','tokens','log','armed','H','V','HI','VI','lost','kingTaken','kingLast','leap','kawari','freeUsed','lastTurn','shadow'];
 function snapshot(){const o={}; for(const k of SNAPKEYS) o[k]=S[k]; return clone(o);}
 function restore(sn){Object.assign(S,clone(sn));}
 const handIdx=id=>S.hand.findIndex(c=>c.id===id);
@@ -1278,7 +1278,7 @@ function applyAct(a){
     if(a.tech==='kei') tokensOf(p.card.id).push({m:clone(KNIGHT8),src:'tech'}); // L字の跳びを1回分
     if(a.tech==='dash'){ if(a.mode==='pierce') S.armed=p.card.id; else S.dash=p.card.id; } // 疾走Lv2は貫通も選べる
     if(a.tech==='sword') swordStrike(p,a.pos,d);
-    if(a.tech==='bunshin'&&a.cell&&!S.board[a.cell[1]][a.cell[0]]){ S.board[a.cell[1]][a.cell[0]]={side:'p',card:{...mkP('H'),m:clone(p.card.m),v:1,clone:true},held:[]}; d.cell=a.cell; }
+    if(a.tech==='bunshin'&&a.cell&&!S.board[a.cell[1]][a.cell[0]]){ const cl={...mkP('H'),m:[],v:1,clone:true}; S.board[a.cell[1]][a.cell[0]]={side:'p',card:cl,held:[]}; S.shadow=[...(S.shadow||[]),cl.id]; d.cell=a.cell; }
     if(a.tech==='kawari') S.kawari=[a.pos[0],a.pos[1]];
   } else if(a.type==='hero'){
     // 札を選んで盤をタップ：シノビがその札の動き（黒い点・1回）を持って現れる
@@ -1336,6 +1336,7 @@ function applyAct(a){
     }
     // 寝返った駒は、一太刀だけ貸して去る
     if((p.card.turned||p.card.clone)&&S.board[t.y][t.x]===p){ S.board[t.y][t.x]=null; delete S.tokens[p.card.id]; if(S.armed===p.card.id) S.armed=null; if(S.dash===p.card.id) S.dash=null; d.left=true; }
+    if(p.hero&&(S.shadow||[]).length) shadowFollow(t,fx,fy,d,t.pierce?'pierce':leapTk?'leap':'move'); // 影分身が、シノビのこの1手をまねる
   } else if(a.type==='warp'){
     const [fx,fy]=a.from, p=S.board[fy][fx]; d.from=a.from;
     if(p&&p.hero&&!S.board[a.y][a.x]){ S.board[a.y][a.x]=p; S.board[fy][fx]=null; S.kawari=null;
@@ -1535,7 +1536,7 @@ function onCell(x,y){
   }
   if(selCard&&selCard.kind==='p'){
     const mv=moverPos(); if(mv){ const t=cardTargets(mv[0],mv[1],selCard).find(t=>t.x===x&&t.y===y); if(t){ plan({type:'move',from:mv,x,y,card:selCard.id}); return; } }
-    if(o&&o.side==='p'){ S.selPos=[x,y]; tok(1); render(); return; }
+    if(o&&o.side==='p'&&!o.card.clone){ S.selPos=[x,y]; tok(1); render(); return; }
     S.sel=null; render(); return;
   }
   if(selCard&&selCard.kind==='i'&&selCard.it==='shuriken'){
@@ -1566,16 +1567,16 @@ function onCell(x,y){
   }
   // 駒を選ばなくても、動ける先をタップすれば動く（届く駒が複数なら、最後に打った駒を優先）
   { const ps=myPieces().reverse(); for(const [px,py] of ps){ if(legalTargets(px,py).some(t=>t.x===x&&t.y===y)){ plan({type:'move',from:[px,py],x,y}); return; } } }
-  if(o&&o.side==='p'){ S.selPos=(S.selPos&&S.selPos[0]===x&&S.selPos[1]===y)?null:[x,y]; S.sel=null; tok(1); render(); return; }
+  if(o&&o.side==='p'&&!o.card.clone){ S.selPos=(S.selPos&&S.selPos[0]===x&&S.selPos[1]===y)?null:[x,y]; S.sel=null; tok(1); render(); return; }
   S.sel=null; S.selPos=null; render();
 }
 // 駒札で動かす駒：選んでいる自分の駒、なければシノビ
 function moverPos(){
-  if(S.selPos){ const o=S.board[S.selPos[1]][S.selPos[0]]; if(o&&o.side==='p') return S.selPos; }
+  if(S.selPos){ const o=S.board[S.selPos[1]][S.selPos[0]]; if(o&&o.side==='p'&&!o.card.clone) return S.selPos; }
   return heroPos();
 }
 // 盤上の自分の駒（この手番に打った駒ほど後ろ）
-function myPieces(){ const out=[]; for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const o=S.board[r][c]; if(o&&o.side==='p') out.push([c,r,S.log.dropped.indexOf(o.card.id)]);} return out.sort((a,b)=>a[2]-b[2]).map(([c,r])=>[c,r]); }
+function myPieces(){ const out=[]; for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const o=S.board[r][c]; if(o&&o.side==='p'&&!o.card.clone) out.push([c,r,S.log.dropped.indexOf(o.card.id)]);} return out.sort((a,b)=>a[2]-b[2]).map(([c,r])=>[c,r]); }
 const selCard0=()=>S.sel!=null?getCard(S.sel):null;
 const boardHasMine=()=>S.board.some(r=>r.some(o=>o&&o.side==='p'));
 function hintMsg(t){ $('#hint').textContent=t; }
@@ -1638,7 +1639,53 @@ function replayClose(){
   if(!RP||busy) return;
   S=RP.keep; RP=null; render(); kyokuClear();
 }
+// ===== 影分身 =====
+// 分身は自分の動きを持たない。シノビの次の1手（駒札・黒い点・金の点・疾走・貫通・跳躍のどれでも）と同じ動きを1回して、すぐ消える
+// 同じ動き＝同じ向き・同じ距離。途中で敵や壁に当たればそこまで。爆弾・矢印・鏡は分身が踏む
+const CLONE_STEAL=false; // 分身が討った敵の動きは奪えない（trueにするとシノビが奪う）
+function shadowFollow(t,fx,fy,d,via){ // via：シノビの動きの種類（貫通・跳躍で討った敵からは、分身でも動きを奪えない）
+  const ids=S.shadow||[]; S.shadow=[]; d.shadow=[];
+  const seg=e=>e.arrows&&e.arrows.length&&!e.pierce?e.arrows[0]:[e.x,e.y]; // 矢印・鏡で曲がる前の、まっすぐの区間の終わり
+  const st=v=>Math.max(Math.abs(v[0]),Math.abs(v[1]));
+  const hs=seg(t), hd=[hs[0]-fx,hs[1]-fy], hp=heroPos(), hero=hp?S.board[hp[1]][hp[0]]:null;
+  for(const id of ids){
+    let pos=null; for(let r=0;r<S.n&&!pos;r++)for(let c=0;c<S.n;c++){ const o=S.board[r][c]; if(o&&o.card.id===id){ pos=[c,r]; break; } }
+    if(!pos) continue;
+    const [cx,cy]=pos, cl=S.board[cy][cx]; let ct=null;
+    if(t.pierce){ const f=t.pts&&t.pts[1]; if(f) ct=pierceMoves(S.board,cx,cy,[[f[0]-fx,f[1]-fy,0]])[0]||null; }
+    else if(t.sk){ const sp=t.sk.split(',').map(Number);
+      const cs=movesOf(S.board,cx,cy,[sp],'p').map(e=>{ const q=seg(e); return {e,v:[q[0]-cx,q[1]-cy]}; });
+      const same=cs.find(o=>o.v[0]===hd[0]&&o.v[1]===hd[1]);
+      ct=same?same.e:((cs.filter(o=>st(o.v)<=st(hd)).sort((a,b)=>st(b.v)-st(a.v))[0])||{}).e||null; }
+    S.board[cy][cx]=null; delete S.tokens[id];
+    const sh={from:[cx,cy],to:ct?[ct.x,ct.y]:[cx,cy],caps:[],bomb:[],booms:[],dist:0};
+    d.shadow.push(sh);
+    if(!ct) continue;
+    for(const [ax,ay] of (ct.arrows||[])) S.board[ay][ax]=null;
+    const end0=S.board[ct.y][ct.x], bombEnd=!ct.pierce&&end0&&end0.side==='i'&&end0.card.it==='bomb'?end0:null;
+    for(const [ex,ey] of ct.caps){ const e=S.board[ey][ex]; if(!e||e.side!=='e') continue;
+      const stl=!movesOf(S.board,ex,ey,e.card.m,'e').some(m=>m.x===cx&&m.y===cy);
+      const r=captureAt(ex,ey,cl,{via,jump:ct.jump,stealth:stl});
+      if(r){ sh.caps.push({x:ex,y:ey,...r}); if(CLONE_STEAL&&r.m&&hero) tokensOf(hero.card.id).push({m:r.m,src:'cap'}); } }
+    for(const [bx,by] of (ct.bombs||[])){ const bo=S.board[by][bx]; if(bo&&bo.side==='i'){ S.board[by][bx]=null; explodeAt(bx,by,bo.card.lv||1,cl,sh); sh.booms.push([bx,by]); } }
+    if(bombEnd){ S.board[ct.y][ct.x]=null; explodeAt(ct.x,ct.y,bombEnd.card.lv||1,cl,sh); sh.booms.push([ct.x,ct.y]); }
+    sh.dist=ct.dist||1; S.log.dist=(S.log.dist||0)+sh.dist;
+  }
+}
+async function animShadow(list,i){
+  const sp=Math.max(.32,Math.pow(.86,i));
+  for(const sh of list){
+    if(sh.to[0]===sh.from[0]&&sh.to[1]===sh.from[1]){ floatText(sh.from[0],sh.from[1],'影が消えた','m'); await sleep(Math.max(160,280*sp)); continue; }
+    stamp(sh.from[0],sh.from[1],'影'); bullet(sh.from,sh.to,Math.max(140,300*sp)); await sleep(Math.max(140,300*sp));
+    if(sh.dist) addLive(sh.dist*MOVE_CHIP,0);
+    for(const [bx,by] of sh.booms){ impact(bx,by,12,true); flash(); stamp(bx,by,'爆'); }
+    for(const c of [...sh.caps,...sh.bomb]){ impact(c.x,c.y,6,!!c.king); if(c.v){ addLive(c.v*CHIP_PER_V,0); floatText(c.x,c.y,`+${c.v*CHIP_PER_V}`,'c'); } if(c.m&&CLONE_STEAL) floatText(c.x,c.y,'動きを得た','k',1); if(c.king){ flash(); bigText('忍殺',900); } }
+    if(sh.caps.length||sh.bomb.length) chime(S.log.caps.length); else tok(2);
+    await sleep(Math.max(200,(sh.booms.length?520:380)*sp));
+  }
+}
 async function animAct(d,i){
+  if(d.type==='move'&&d.shadow&&d.shadow.length&&!d._sh){ await animAct({...d,_sh:1},i); await animShadow(d.shadow,i); return; }
   const sp=Math.max(.32,Math.pow(.86,i));
   if(d.type==='hero'){ render(); dropIn(d.x,d.y);
     if(d.hit){ await sleep(200*sp); impact(d.x,d.y,9,false); shake(6); floatText(d.x,d.y,`被弾 体力${S.hp}`,'m',1); await sleep(520*sp); }
@@ -2402,7 +2449,7 @@ function render(){
 
   const ctl=$('#controls'), hint=$('#hint');
   if(play){
-    hint.innerHTML=!heroPos()?`<b>忍び込む</b>：空きマスをタップ。${HB}のマスに現れると斬られる`:`駒札を選んで、光るマスへ。決行までは何度でも戻せる`;
+    hint.innerHTML=!heroPos()?`<b>忍び込む</b>：空きマスをタップ。${HB}のマスに現れると斬られる`:`駒札を選んで、光るマスへ。決行までは何度でも戻せる${(S.shadow||[]).length?`<br><b>影</b>：シノビの次の1手を、分身${S.shadow.length>1?`${S.shadow.length}体`:''}がまねる`:''}`;
     const canUndo=S.actions.length>S.lockAt;
     ctl.innerHTML=`<button class="btn" id="cUndo" type="button" ${canUndo?'':'disabled'}>一手戻す</button>
       <button class="btn" id="cClear" type="button" ${canUndo?'':'disabled'}>やり直す</button>
@@ -2569,7 +2616,7 @@ function showRules(first){
     <li><b>奪う</b>：討った敵の動きを1回使える。技や爆弾で倒すと奪えない。</li>
     <li>${HB}<b>割れたハート</b>：斬られるマス。王と剣持ちの利きに現れたり、剣持ちの利きに止まったりすると体力−1。</li>
     <li><b>壁</b>：石垣（茶色）は爆弾で壊せる。第二幕からの鉄扉（青灰色・鋲つき）は、跳ぶ動き（技「跳躍」など）でしか越えられない（爆弾でも壊れない）。</li>
-    <li><b>道具</b>：毎局補充（密書は1つまで）。<b>技</b>：使うと手札を捨てる。分身は一太刀で消え、変わり身は残した印へ1回戻れる。<b>巻物</b>：持つだけで効く。青い枠は「掟破り」。</li>
+    <li><b>道具</b>：毎局補充（密書は1つまで）。<b>技</b>：使うと手札を捨てる。分身はシノビの次の1手をまねて消え、変わり身は残した印へ1回戻れる。<b>巻物</b>：持つだけで効く。青い枠は「掟破り」。</li>
     <li><b>★3つ</b>：全滅・無傷（斬られない）・王が最後（ほかを全部討ってから、王を討つ）。★はお金になる。点数もお金になる。</li>
     <li><b>体力${HP0}</b>：0でもまだ戦える。0から斬られると倒れる。</li>
     <li>突破すると戦利品。茶屋でお金を使い、次の陣へ。お金は貯めると利子が付く（5金ごとに+1）。</li>
