@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>シノビ（仮題） 試作 v88</title>
+<title>シノビ（仮題） 試作 v90</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -315,8 +315,8 @@ button{font:inherit;color:inherit}
 #dai{background:rgba(36,86,79,.06);border-radius:4px;padding:0 4px}
 #dai .tp.tool .cnt.lv{right:auto;left:-4px;background:var(--mult)}
 .cell.tprev{background:rgba(214,64,52,.22);box-shadow:inset 0 0 0 3px rgba(214,64,52,.75)}
-.cell.tgtOk{box-shadow:inset 0 0 0 4px var(--gold);animation:pulse 1s ease-in-out infinite}
-@keyframes pulse{50%{box-shadow:inset 0 0 0 2px var(--gold)}}
+.cell.tgtOk{box-shadow:inset 0 0 0 4px var(--gold);animation:tgtPulse 1s ease-in-out infinite}
+@keyframes tgtPulse{50%{box-shadow:inset 0 0 0 2px var(--gold)}}
 .dirB:disabled{opacity:.25;cursor:default}
 .enGrid{display:grid;gap:6px;max-width:300px;margin:8px auto}
 .enGrid .enC{aspect-ratio:1;display:flex;align-items:center;justify-content:center;min-height:0;height:auto}
@@ -365,7 +365,8 @@ button{font:inherit;color:inherit}
 .bgmBtn{position:relative;font-size:1rem;min-width:2.4em}
 .bgmBtn.off{opacity:.4}
 .bgmBtn.off::after{content:"";position:absolute;left:18%;right:18%;top:50%;height:2px;background:currentColor;transform:rotate(-40deg);border-radius:2px}
-.rtaRow{display:flex;gap:6px}.rtaRow .modeB{flex:1}
+.rtaRow{display:flex;gap:6px}
+.rtaClockRow{margin:-2px 0 6px!important;font-size:.85rem}.rtaClockRow b{font-variant-numeric:tabular-nums;color:var(--ink)}.rtaRow .modeB{flex:1}
 </style>
 </head>
 <body>
@@ -422,11 +423,13 @@ const BAL0={
 };
 let BAL=clone0(BAL0);
 function clone0(o){ return JSON.parse(JSON.stringify(o)); }
-try{ const o=JSON.parse(localStorage.getItem('shinobiRL.bal')||'null'); if(o) BAL=Object.assign(clone0(BAL0),o); }catch(e){}
+// 保存した調整表に新しい項目がなくても落ちないよう、入れ子の中まで初期値と合わせる
+function mergeBal(o){ const b=clone0(BAL0); for(const k in o||{}) b[k]=b[k]&&typeof b[k]==='object'&&o[k]&&typeof o[k]==='object'?Object.assign(b[k],o[k]):o[k]; return b; }
+try{ const o=JSON.parse(localStorage.getItem('shinobiRL.bal')||'null'); if(o) BAL=mergeBal(o); }catch(e){}
 const lin=(p,n)=>p.base+p.step*n;
-const HP0=3, STAR_GOLD=1, HEAL_PRICE=5, SLOTS0=5, SLOTS_MAX=10, SLOT_PRICE=12;
+const HP0=3, STAR_GOLD=1, SLOTS0=5, SLOTS_MAX=10; // 値段は調整表（BAL）だけで決める
 // 道具棚：道具は駒袋に入らず棚に並ぶ。毎局の始めに全部使える状態に戻り、1局に1回ずつ使える
-const SHELF0=5, SHELF_MAX=8, SHELF_UP_PRICE=8;
+const SHELF0=5, SHELF_MAX=8;
 const shelfCount=()=>S.shelf.reduce((a,e)=>a+(e.n||1),0); // 道具棚は個数で数える
 const CHIP_PER_V=5, MOVE_CHIP=3; // 動いた1マスにつきチップ+3（役が付いた手番のみ）
 // お金：突破報酬（固定）＋星＋点数ボーナス（対数）＋利子（5金につき1金、最大5）
@@ -488,14 +491,13 @@ const ITEMS={
 // 系統：爆（範囲で崩す）・筆（1つの駒で走り抜ける）・寝（敵を寝返らせて数で攻める）
 // 系統タグ（表示だけ。品の出やすさには関係しない）
 const ITEM_TAG={shuriken:'',bomb:'爆',arrow:'筆',stone:'筆',missive:'寝',lure:'',magnet:'',shield:'',mirror:'筆'};
-const ITEM_PRICE={shuriken:4,bomb:5,arrow:4,stone:4,missive:6,lure:3,magnet:4,shield:6,mirror:4};
 // 技：道具とは別。移動を強くする技で、使うとき手札を1枚捨てる。1局に1回ずつ。茶屋で覚える
 const TECHS={
   kei:{name:'跳躍',k:'跳',desc:'L字に跳ぶ動き（8方向）を1回得る。壁も駒も跳び越える'},
   dash:{name:'疾走',k:'走',maxLv:2,lvs:['','疾走','疾走／貫通'],desc:'次の1手が、どこまでも進む。修行すると「貫通」も選べる：壁を越え、通り道の敵を全部討つ'},
   bunshin:{name:'分身',k:'影',desc:'シノビの隣の空きマスに分身を出す。分身はシノビの黒い点を写し、1回動いたら消える'},
   kawari:{name:'変わり身',k:'替',desc:'今いるマスに印を残す。あとで1回、シノビはその印へ戻れる（一筆は途切れない）'},
-  sword:{name:'剣',k:'剣',cost:1,maxLv:5,lvs:['','十字の1方向','8方向の1方向','3方向','全方向','飛ぶ斬撃'],desc:'動かずに、隣の敵を斬る。王も斬れる'},
+  sword:{name:'剣',k:'剣',maxLv:5,lvs:['','十字の1方向','8方向の1方向','3方向','全方向','飛ぶ斬撃'],desc:'動かずに、隣の敵を斬る。王も斬れる'},
 };
 // 技は道具と同じく回数で持つ。持てる回数の合計は技の枠まで（茶屋で増やせる）
 const TECH_SLOTS0=3, TECH_SLOTS_MAX=6, TECH_PRICE=8;
@@ -524,17 +526,6 @@ const costBadge=k=>k==='dash'&&techLv('dash')>=2?'0/1':String(techCost(k));
 const techLv=k=>(S&&S.techLv&&S.techLv[k])||1;
 const techDesc=k=>TECHS[k].maxLv?`${TECHS[k].desc}（Lv${techLv(k)}：${TECHS[k].lvs[techLv(k)]}）`:TECHS[k].desc;
 const techSVG=k=>`<svg class="pz mine" viewBox="0 0 100 100" aria-hidden="true"><rect class="tile" x="4" y="4" width="92" height="92" rx="16" style="fill:#EEF2FA;stroke:#24426E;stroke-width:4"/><text x="50" y="54" text-anchor="middle" dominant-baseline="central" style="font-family:'Shippori Mincho',serif;font-size:44px;font-weight:800;fill:#24426E">${TECHS[k].k}</text></svg>`;
-// 駒を育てる：↗ → ↗↙ → 斜め4つ → 8方向
-function growM(m){
-  const isOne=([x,y,r])=>r===1&&Math.abs(x)<=1&&Math.abs(y)<=1;
-  const one=m.filter(isOne), rest=m.filter(s=>!isOne(s)), set=new Set(one.map(([x,y])=>x+','+y));
-  if(set.size===0) set.add('0,-1');
-  else if(set.size===1){ const [x,y]=one[0]; set.add((-x)+','+(-y)); }
-  else if(set.size<4){ for(const [x,y] of one){ set.add((-y)+','+x); set.add(y+','+(-x)); } }
-  else for(const [x,y] of Object.values(DIRS)) set.add(x+','+y);
-  return [...rest,...[...set].map(k=>{const [x,y]=k.split(',').map(Number); return [x,y,1];})];
-}
-const canGrow=c=>c.kind==='p'&&growM(c.m).length>c.m.length;
 const tagLabel=t=>t?`【${t}】`:'';
 /* ===== 面（敵陣）。h:[x,y]はマスの下辺、v:[x,y]はマスの右辺に石垣 ===== */
 const hl=(y,xs)=>xs.map(x=>[x,y]), vl=(x,ys)=>ys.map(y=>[x,y]);
@@ -579,7 +570,8 @@ const GEN=new Proxy([],{get:(a,k)=>typeof k==='string'&&/^\d+$/.test(k)?(+k>=2?g
 // LAYOUT_SEED：陣を作る種。同じ種なら毎回同じ陣になる（固定）。開発モードで「毎回ランダム」にも切り替えられる
 const LAYOUT_SEED_DEFAULT=20261029;
 let LAYOUT_MODE='fixed', LAYOUT_SEED=LAYOUT_SEED_DEFAULT;
-try{ const m=localStorage.getItem('shogiRL.layoutMode'), sd=localStorage.getItem('shogiRL.layoutSeed'); if(m) LAYOUT_MODE=m; if(sd) LAYOUT_SEED=+sd; }catch(e){}
+const lsGet=k=>localStorage.getItem('shinobiRL.'+k)??localStorage.getItem('shogiRL.'+k); // 古いキー（shogiRL.）も読む
+try{ const m=lsGet('layoutMode'), sd=lsGet('layoutSeed'); if(m) LAYOUT_MODE=m; if(sd) LAYOUT_SEED=+sd; }catch(e){}
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 // 敵は王から「かたまり」で育てるように置く（すでに置いた駒の2マス以内）。大きい盤では見張りの小隊も作る
 function genLayout(fi,seed,attempt){
@@ -623,7 +615,8 @@ function genLayout(fi,seed,attempt){
 }
 const FACE_NAMES=[['見張り','関所','砦','出城','櫓','番所','外堀'],['二の丸','三の丸','枡形','虎口','内堀','馬出','隅櫓'],['本丸','天守台','大手門','多聞櫓','奥御殿','石落とし','大天守']];
 const BOSS_NAMES=['城主','城代','大名'];
-// ボスの王の利き（剣持ち）。第一幕：十字にどこまでも＋斜め1マス、第二幕：十字と斜めにどこまでも、第三幕：それに加えてL字の跳び8方向
+// 【不採用】ボスの王の長い利き（第一幕：十字にどこまでも＋斜め1マス、第二幕：十字と斜めにどこまでも、第三幕：それに加えてL字の跳び8方向）。
+// 仕様から外した。今のボスの王は「剣を持つ王」で、利きはふつうの王と同じ1マス。kingM は「ボスの王」の印としてだけ使っている（中身の動きは使わない）
 const KNIGHT8=[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]].map(([x,y])=>[x,y,1]);
 const BOSS_KING_M=[
   [...ORTH.map(([x,y])=>[x,y,0]),...DIAG.map(([x,y])=>[x,y,1])],
@@ -637,11 +630,14 @@ function genRunLayouts(seed){
     FACES[fi]={name:boss?BOSS_NAMES[act]:nm[rand(nm.length)],...(boss?{boss:act===2?'big':'mid',kingM:BOSS_KING_M[act]}:{}),...genLayout(fi,seed,0)};
   }
 }
-// 遊べる陣か：見られていない空きマスから、持ち物の駒札で誰かを討てる出だしがあるか
+// 最初の持ち物。4枚は1方向ずつ、1枚だけ十字
+const STARTER=['sN','sN','sNW','sNE','sP'];
+// 遊べる陣か：見られていない空きマスから、最初の持ち物の駒札で誰かを討てる出だしがあるか
+// 今の手札ではなく最初の持ち物で判定する（持ち物しだいで固定モードの陣が変わらないように）
 function layoutOK(){
-  const sc=seenCells();
+  const sc=seenCells(), cards=STARTER.map(k=>({kind:'p',m:T[k].m}));
   for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){ if(S.board[r][c]||sc.has(c+','+r)) continue;
-    for(const card of S.hand) if(card.kind==='p'&&movesOf(S.board,c,r,card.m,'p').some(t=>t.caps.length)) return true; }
+    for(const card of cards) if(card.kind==='p'&&movesOf(S.board,c,r,card.m,'p').some(t=>t.caps.length)) return true; }
   return false;
 }
 // ボスの縛り。中ボス（第五面）は軽いもの、ボス（第九面）は重いものから選ぶ
@@ -722,8 +718,7 @@ let S, uid=1, busy=false, muted=false;
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $=s=>document.querySelector(s);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms*(RM?.4:1)));
-// ゲームの運：シード固定のランでは、茶屋・戦利品・配置の運も毎回同じになる（RTAの固定シード用）。演出の揺れは別
-const RTA_SEED=20261031;
+// ゲームの運：S.rngSeeded のときだけシード固定（今は使っていない。固定シードRTAも陣だけ固定で、茶屋・戦利品は毎回ちがう）。演出の揺れは常に Math.random
 function RNG(){ if(S&&S.rngSeeded){ let t=(S.rng=(S.rng+0x6D2B79F5)|0); t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; } return Math.random(); }
 const rand=n=>Math.floor(RNG()*n);
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=rand(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
@@ -751,13 +746,11 @@ function bombRays(x,y,lv){
   if(lv>=2) for(const [dx,dy] of DIAG) ray(dx,dy,lv>=4);
   return {cells,bh,bv};
 }
-const bombCells=(x,y,lv)=>bombRays(x,y,lv).cells;
 const cardDesc=c=>c.kind==='i'?ITEMS[c.it].desc:`価値${c.v}`;
 const cardName=c=>c.clone?'分身':c.turned?'寝返った'+T[c.code].name:c.kind==='i'?ITEMS[c.it].name+(c.it==='bomb'?` Lv${c.lv||1}`:''):(c.custom?T[c.code].name+'＋強化':T[c.code].name)+((c.moves||1)>1?`（${c.moves}回）`:'')+(c.g?'・'+'育'.repeat(c.g):'');
 const yv=k=>{const y=YAKU[k], L=S.levels[k]; return [y.c+y.dc*(L-1), y.m+y.dm*(L-1)];};
 // 取った駒はこちら向きになる（上下反転）
 const flipM=m=>m.map(([dx,dy,rg])=>[dx,-dy,rg]);
-function flipCode(c){ if(c==='jS') return 'jN'; if(c==='jN') return 'jS'; if(c==='sFw') return 'sBk'; const m=c.match(/^([sr])([NS]?)([EW]?)$/); if(m&&m[2]) return m[1]+(m[2]==='N'?'S':'N')+m[3]; return c; }
 function union(a,b){const seen=new Set(a.map(s=>s.join(','))), out=a.map(s=>[...s]); for(const s of b){const k=s.join(','); if(!seen.has(k)){seen.add(k); out.push([...s]);}} return out;}
 
 // 割れたハート：斬られる（体力が減る）印
@@ -899,7 +892,7 @@ function saveRun(at){ if(!S||S.demo) return; S.resumeAt=at; try{ localStorage.se
 function clearRun(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 function loadRun(){ try{ return JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); }catch(e){ return null; } }
 function resumeRun(){ const d=loadRun(); if(!d) return;
-  FACES.length=0; d.FACES.forEach(f=>FACES.push(f)); S=d.S; uid=Math.max(uid,1+Math.max(0,...[...JSON.stringify(d.S).matchAll(/"id":(\d+)/g)].map(m=>+m[1]))); closeModal();
+  FACES.length=0; d.FACES.forEach(f=>FACES.push(f)); S=d.S; RUN_MODE=S.mode; uid=Math.max(uid,1+Math.max(0,...[...JSON.stringify(d.S).matchAll(/"id":(\d+)/g)].map(m=>+m[1]))); closeModal();
   if(S.resumeAt==='shop'){ S.phase='shop'; renderShop(); } else if(S.resumeAt==='reward'){ rewardPicker(); } else startKyoku(); }
 // 裏モードの最初の持ち物：点数の予算内で、好きな駒を組む（伝説の駒も使える）
 const DECK_BUDGET=15, DECK_COST={1:1,2:2,3:3,4:5,5:7};
@@ -928,12 +921,12 @@ const fixedStars=()=>Object.values(META.stars).reduce((a,b)=>a+b,0);
 const rtaRec=c=>{ const b=META.rtaBest&&typeof META.rtaBest==='object'?META.rtaBest[c]:(c==='fixed'?META.rtaBest:0); return b?`記録 ${fmtTime(b)}`:'記録 まだ'; };
 function showTitle(){
   const d=loadRun(), N=ACTS*PER_ACT, best=k=>META.best[k]<0?'まだ':META.best[k]>=N-1&&META.clears[k]?'制覇':faceTitle(META.best[k])+'まで';
-  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v88</p></div>
+  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v90</p></div>
     ${d?`<button class="btn pri" id="tCont" type="button" style="width:100%;margin-bottom:6px">つづきから<br><small>${d.S.rta?`RTA ${d.S.rtaCat==='random'?'ランダム':'固定'}シード`:MODE_NM[d.S.mode]||'固定'}・${faceTitle(d.S.face)}${d.S.resumeAt==='kyoku'?'':(d.S.retry?'（出直し前）':'を突破したところ')}</small></button>
-    <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:6px">最初から（${MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
+    <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:6px">最初から（${d.S.rta?`RTA ${d.S.rtaCat==='random'?'ランダム':'固定'}シード`:MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
     ${ckptButtons()}<div style="height:6px"></div>
     <button class="btn${d?'':' pri'} modeB" id="tFixed" type="button"><b>固定モード</b><small>陣はいつも同じ。覚えて、上達する。<br>記録：${best('fixed')}${(META.rank||{}).fixed?`　評価 ${META.rank.fixed}`:''}　★${fixedStars()}/${N*3}</small></button>
-    <div class="rtaRow"><button class="btn modeB" id="tRta" type="button"><b>RTA 固定シード</b><small>陣も茶屋も毎回同じ<br>${rtaRec('fixed')}</small></button><button class="btn modeB" id="tRtaR" type="button"><b>RTA ランダムシード</b><small>陣も茶屋も毎回ちがう<br>${rtaRec('random')}</small></button></div>
+    <div class="rtaRow"><button class="btn modeB" id="tRta" type="button"><b>RTA 固定シード</b><small>陣は毎回同じ<br>${rtaRec('fixed')}</small></button><button class="btn modeB" id="tRtaR" type="button"><b>RTA ランダムシード</b><small>陣も毎回ちがう<br>${rtaRec('random')}</small></button></div>
     <p class="meta" style="margin-top:-2px">RTA（100%）：★3の計画でしか決行できない。★45で完走するまでの時間を競う。</p>
     <button class="btn modeB" id="tRand" type="button"><b>ランダムモード（上級）</b><small>陣が毎回変わる。<br>記録：${best('random')}${(META.rank||{}).random?`　評価 ${META.rank.random}`:''}</small></button>
     ${uraOpen()?`<button class="btn modeB ura" id="tUra" type="button"><b>裏モード</b><small>持ち物を自分で組む。伝説の駒が使える。敵は多い。<br>記録：${best('ura')}</small></button>`
@@ -945,7 +938,7 @@ function showTitle(){
   const armed={};
   const go=(m,btn)=>{ if(d&&!armed[btn.id]){ armed[btn.id]=true; btn.dataset.lbl=btn.innerHTML; btn.innerHTML='<b>つづきのデータが消える。もう一度押すと始める</b>'; tok(1); return; } clearRun(); closeModal(); newRun(m); };
   bindCkpt();
-  if(d){ $('#tCont').onclick=resumeRun; $('#tRestart').onclick=e=>go(d.S.mode,e.currentTarget); }
+  if(d){ $('#tCont').onclick=resumeRun; $('#tRestart').onclick=e=>go(d.S.rta?(d.S.rtaCat==='random'?'rtaR':'rta'):d.S.mode,e.currentTarget); }
   $('#tFixed').onclick=e=>go('fixed',e.currentTarget);
   $('#tRta').onclick=e=>go('rta',e.currentTarget); $('#tRtaR').onclick=e=>go('rtaR',e.currentTarget); $('#tRand').onclick=e=>go('random',e.currentTarget);
   if(uraOpen()) $('#tUra').onclick=e=>go('ura',e.currentTarget);
@@ -954,17 +947,16 @@ function showTitle(){
 }
 function newRun(mode,demo){
   mode=mode||(S&&S.mode)||'fixed';
-  // RTA（100%）：固定シード＝陣も茶屋も戦利品も毎回同じ。ランダムシード＝毎回ちがう
+  // RTA（100%）：固定シード＝陣が毎回同じ（茶屋・戦利品は毎回ちがう）。ランダムシード＝陣も毎回ちがう
   const rta=mode==='rta'||mode==='rtaR', rtaCat=mode==='rta'?'fixed':mode==='rtaR'?'random':null; if(mode==='rta') mode='fixed'; if(mode==='rtaR') mode='random';
-  const seed=mode==='fixed'?LAYOUT_SEED:Math.floor(Math.random()*1e9);
+  const seed=mode==='fixed'&&(LAYOUT_MODE==='fixed'||rtaCat==='fixed')?LAYOUT_SEED:Math.floor(Math.random()*1e9);
   RUN_MODE=mode; genRunLayouts(seed);
   S={mode,demo:!!demo,layoutSeed:seed,face:0,gold:4,fans:[],levels:Object.fromEntries(YORDER.map(k=>[k,1])),
      // 持ち札は最初5枚。4枚は1方向ずつ、1枚だけ十字。足りない動きは、討った敵から奪う
-     bag:[mkP('sN'),mkP('sN'),mkP('sNW'),mkP('sNE'),mkP('sP')], // 十字1枚：後ろや横へ戻れる札
+     bag:STARTER.map(mkP), // 十字1枚：後ろや横へ戻れる札
      shelf:[],shelfMax:SHELF0,slots:SLOTS0,firstShop:true,techs:[],techLv:{},techN:{},techSlots:TECH_SLOTS0,
      hp:HP0,hpMax:HP0,total:0};
   if(rta){ S.rta=true; S.rtaMs=0; S.rtaCat=rtaCat; }
-  if(rtaCat==='fixed'){ S.rngSeeded=true; S.rng=RTA_SEED; } // 運も固定
   if(!demo){ try{ localStorage.removeItem(CKPT_KEY); }catch(e){} S.ckpt={}; }
   if(mode==='ura'){ S.bag=[]; deckBuilder(); return; }
   startFace();
@@ -992,7 +984,7 @@ function startKyoku(){
   S.formation=fm.e.map(x=>x[0]);
   S.n=f.n; S.board=Array.from({length:S.n},()=>Array(S.n).fill(null));
   for(const [code,c,r,flag] of fm.e){const card=mkP(code); const o={side:'e',card,held:[],sword:fm.sw.some(([a,b])=>a===c&&b===r)};
-    if(code==='K'&&f.kingM){ o.sword=true; } // ボスの王は剣を持つ。利きは駒の点どおり
+    if(code==='K'&&f.kingM){ o.sword=true; } // ボスの王は剣を持つ。利きは駒の点どおり（長い利きは不採用）
     else if(code==='K'&&f.kingDirs){ o.sword=true; card.m=f.kingDirs.map(d=>[...DIRS[d],1]); }
     if(code==='K'&&S.rule==='kenjo'&&!flag) o.hp=2;
     if(flag==='fake') o.fake=true;
@@ -1010,7 +1002,7 @@ function startKyoku(){
   beginTurn();
   saveRun('kyoku');
 }
-// 王の利きが届くマス。シノビがそこに現れると斬られる（ボスの王は利きが長い）
+// 王の利きが届くマス。シノビがそこに現れると斬られる（ボスの王も利きはふつうの王と同じ）
 function seenCells(){
   const out=new Set();
   for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const e=S.board[r][c]; if(!e||e.side!=='e'||e.card.code!=='K') continue;
@@ -1031,8 +1023,15 @@ function beginTurn(){
 
 /* ===== 動き ===== */
 // 石垣（H・V）と鉄扉（HI・VI）。ふつうの動きはどちらでも止まる。貫通・疾走は鉄扉で止まる。跳ぶ動きはどちらも越える
-function blocked(x,y,dx,dy){ return wallHit(new Set([...S.H,...(S.HI||[])]),new Set([...S.V,...(S.VI||[])]),x,y,dx,dy); }
-const ironBlocked=(x,y,dx,dy)=>wallHit(new Set(S.HI||[]),new Set(S.VI||[]),x,y,dx,dy);
+// 壁のSetは、壁の配列が入れ替わったときだけ作り直す（壁はfilterや復元で配列ごと差し替わる）
+let WC={};
+function wallSets(){
+  if(WC.H!==S.H||WC.V!==S.V||WC.HI!==S.HI||WC.VI!==S.VI)
+    WC={H:S.H,V:S.V,HI:S.HI,VI:S.VI,aH:new Set([...S.H,...(S.HI||[])]),aV:new Set([...S.V,...(S.VI||[])]),iH:new Set(S.HI||[]),iV:new Set(S.VI||[])};
+  return WC;
+}
+function blocked(x,y,dx,dy){ const w=wallSets(); return wallHit(w.aH,w.aV,x,y,dx,dy); }
+const ironBlocked=(x,y,dx,dy)=>{ const w=wallSets(); return wallHit(w.iH,w.iV,x,y,dx,dy); };
 function wallHit(H,V,x,y,dx,dy){
   const re=dy>0?y:y-1, ce=dx>0?x:x-1;
   const h1=dy!==0&&H.has(x+','+re), h2=dy!==0&&H.has((x+dx)+','+re);
@@ -1158,7 +1157,7 @@ function calc(){
       case 'haneuma': dm=2*cnt(c=>c.jump); break;
       case 'itten': dm=2*cnt(c=>c.single); break;
       case 'kushi': if(cnt(c=>c.via==='pierce')>=3) xm=3; break;
-      case 'gunzei': dm=2*pids.size; break;
+      case 'gunzei': dm=2*new Set(caps.map(c=>c.pid)).size; break; // 討った味方（駒）の数
       case 'chouryaku': dc=30*cnt(c=>c.turned); break;
       case 'hatamoto': if(S.board.flat().filter(o=>o&&o.side==='p').length>=4) xm=2; break;
       case 'sutegoma': dm=S.lost; break;
@@ -1192,7 +1191,7 @@ function cardsFromEnemy(o){
   return [{...o.card,m:T[o.card.code].m.map(s=>[...s])},...o.held.map(c=>clone(c))];
 }
 const valueOf=o=>T[o.card.code].v+o.held.reduce((a,c)=>a+c.v,0);
-// 基本の動き：取るのは何回でも無料、空きマスへは1手番1回。
+// 黒い点（基本の動き）：取る手でも空きマスへでも、1方向を選んで1回だけ。
 // 付与された動き（手札を重ねる・取った駒の動き）は1回ずつ使い切り。手番の終わりに消える
 // この手番に打った駒は王を取れない（王を取るには、王手をかけて敵の手番を耐える）
 const hitsKing=t=>t.caps.some(([x,y])=>{const o=S.board[y][x]; return o&&o.card.code==='K';});
@@ -1222,7 +1221,7 @@ function legalTargets0(x,y){
   if(S.armed===id) out=pierceMoves(S.board,x,y,tks.reduce((m,t)=>union(m,t.m),sl(p))).map(t=>({...t,token:null}));
   else{
     const mp=new Map();
-    for(const t of movesOf(S.board,x,y,sl(p),'p')) if(t.caps.length||t.item) mp.set(t.x+','+t.y,{...t,token:null});
+    for(const t of movesOf(S.board,x,y,sl(p),'p')) mp.set(t.x+','+t.y,{...t,token:null}); // 黒い点：空きマスへも動ける（1方向を選んで1回だけ）
     tks.forEach((tk,i)=>{ for(const t of movesOf(S.board,x,y,tk.m,'p')){const k=t.x+','+t.y; if(!mp.has(k)) mp.set(k,{...t,token:i});} });
     out=[...mp.values()];
   }
@@ -1285,7 +1284,7 @@ function applyAct(a){
     // 札を選んで盤をタップ：シノビがその札の動き（黒い点・1回）を持って現れる
     const card=a.card!=null?takeCard(a.card):null; if(card){ S.discard.push(card); L.used++; }
     const rc=recapturer(S.board,a.x,a.y)||(seenCells().has(a.x+','+a.y)?kingAt():null); // 剣持ち・王の利きに現れると斬られる
-    S.board[a.y][a.x]={side:'p',card:{...mkP('H'),hero:true,m:card?clone(card.m):[],v:card?card.v||1:1},held:[],hero:true};
+    S.board[a.y][a.x]={side:'p',card:{...mkP('H'),hero:true,m:card?clone(card.m):[],v:card?card.v||1:1,moves:card&&card.moves||1},held:[],hero:true};
     if(rc){ S.detected=true; if(useShield()) d.blocked=rc; else { S.hp--; S.lost++; d.hit=rc; } }
   } else if(a.type==='move'){
     const [fx,fy]=a.from, p=S.board[fy][fx];
@@ -1320,7 +1319,7 @@ function applyAct(a){
     const explode=(bx,by,lv)=>explodeAt(bx,by,lv,p,d);
     for(const [bx,by] of (t.bombs||[])){ const bo=S.board[by][bx]; if(bo&&bo.side==='i'){ S.board[by][bx]=null; explode(bx,by,bo.card.lv||1); } }
     S.board[t.y][t.x]=p; d.pierce=!!t.pierce; d.jump=t.jump;
-    if(itm){ d.item=itm.card.it;
+    if(itm&&!t.pierce){ d.item=itm.card.it; // 貫通は通り道の爆弾として爆発済み（終点で2回目を起こさない）
       if(itm.card.it==='bomb') explode(t.x,t.y,itm.card.lv||1);
     }
     if(d.bomb.length&&!d.item) d.item='bomb';
@@ -1415,14 +1414,6 @@ function magnetCands(b,x,y){
   for(const [dx,dy] of ST8){ const fx=x+2*dx, fy=y+2*dy, mx=x+dx, my=y+dy; if(!inB(fx,fy)) continue;
     const o=b[fy][fx]; if(o&&o.side==='e'&&!b[my][mx]&&!blocked(fx,fy,-dx,-dy)) out.push({from:[fx,fy],to:[mx,my]}); }
   return out;
-}
-function lurer(b,x,y){
-  let best=null, bk=null;
-  for(let r=0;r<S.n;r++)for(let c=0;c<S.n;c++){const e=b[r][c]; if(!e||e.side!=='e'||e.card.code==='K') continue;
-    if(!movesOf(b,c,r,e.card.m,'e').some(t=>t.x===x&&t.y===y)) continue;
-    const k=[Math.max(Math.abs(c-x),Math.abs(r-y)),-r,c];
-    if(!bk||k[0]<bk[0]||(k[0]===bk[0]&&(k[1]<bk[1]||(k[1]===bk[1]&&k[2]<bk[2])))){bk=k; best=[c,r];}}
-  return best;
 }
 // 技（貫通・剣・跳躍）や爆弾で倒した敵からは動きを奪えない。刀狩りなら、1回（1つの行動）につき最初の1体だけ奪える
 const NOSTEAL=new Set(['bomb','sword','pierce','leap','shuriken']); let kgUsed=0, kingThisAct=false;
@@ -1560,6 +1551,7 @@ function onCell(x,y){
       if(!cs.length){ hintMsg('ここには誰も来ない'); return; }
       if(cs.length>1){ S.pending={kind:'tgt',id:selCard.id,it:'lure',x,y,cands:cs}; tok(1); render(); return; }
       plan({type:'place',id:selCard.id,x,y}); return; }
+    if(o&&o.side!=='p'){ hintMsg(`${ITEMS[selCard.it].name}はここに置けない`); return; }
     if(!o){ if(selCard.it==='arrow'){ S.pending={kind:'dir',id:selCard.id,x,y}; render(); return; }
       if(selCard.it==='mirror'){ S.pending={kind:'dir',id:selCard.id,x,y,mirror:true}; render(); return; }
       const cs=selCard.it==='lure'?lurers(S.board,x,y,true):selCard.it==='magnet'?magnetCands(S.board,x,y).map(c=>c.from):[];
@@ -1591,6 +1583,8 @@ function hintMsg(t){ $('#hint').textContent=t; }
 /* ===== 実行：計画を頭から加速しながら再生 ===== */
 async function execute(){
   if(busy||S.phase!=='play') return;
+  // 撤退：計画は実行しない（失敗した計画の点数が面の点数に残らないように）
+  if(!allDead()){ restore(S.turnStart); S.actions=[]; S.sel=S.selPos=S.pending=null; render(); return kyokuFail(); }
   busy=true; S.phase='anim';
   const acts=S.actions.slice();
   S.replayData={start:clone(S.turnStart),acts:clone(acts)}; // リザルトで見返す用
@@ -1705,7 +1699,6 @@ async function animAct(d,i){
     if(d.run===3) stamp(d.x,d.y,'一筆',1);
     if(d.caps.some(c=>c.fake)) floatText(d.x,d.y,'影武者だった','m',1);
     if(king){ flash(); bigText('忍殺',900); }
-    flyToTray(d.caps.filter(c=>c.toHand),d.x,d.y);
     await sleep(Math.max(140,(king?700:380)*sp));
     if(d.blocked){ stamp(d.x,d.y,'盾'); floatText(d.x,d.y,'盾で防いだ','c',1); await sleep(Math.max(240,460*sp)); }
     if(d.hit){ impact(d.x,d.y,9,false); shake(6); stamp(d.x,d.y,'発'); floatText(d.x,d.y,`見つかった 体力${S.hp}`,'m',1); await sleep(Math.max(260,520*sp)); }
@@ -1722,15 +1715,6 @@ function bullet(from,to,dur){
 function shotSnd(){ if(muted||!AC) return; const t=AC.currentTime, n=noise(.08,2), hp=AC.createBiquadFilter(), g=AC.createGain(); hp.type='highpass'; hp.frequency.value=1800; g.gain.value=.5; n.connect(hp); hp.connect(g); g.connect(MASTER); n.start(t); }
 function addLive(c,m){ S.live.chips+=c; S.live.mult+=m; renderScorebox(); }
 function dropIn(x,y){ const e=cellEl(x,y), pz=e&&e.querySelector('.pz'); anim(pz,[{transform:'translateY(-40%) scale(1.25)',opacity:0},{transform:'translateY(0) scale(1)',opacity:1}],{duration:RM?1:200,easing:'cubic-bezier(.3,.7,.2,1)'}); }
-// 取った駒が手札に飛んでいく
-function flyToTray(caps,x,y){
-  const from=cellCenter(x,y); if(!from||RM) return;
-  for(const c of caps){
-    for(const id of c.ids){ const el=document.querySelector(`#dai .tp[data-id="${id}"]`); if(!el) continue;
-    const b=el.getBoundingClientRect(), dx=from[0]-(b.left+b.width/2), dy=from[1]-(b.top+b.height/2);
-    anim(el,[{transform:`translate(${dx}px,${dy}px) scale(1.3)`,opacity:.9},{transform:'translate(0,0) scale(1)',opacity:1}],{duration:520,easing:'cubic-bezier(.4,.1,.2,1)'}); }
-  }
-}
 function flyFromTop(){ document.querySelectorAll('#tray .tp').forEach((el,i,a)=>{ if(i>=a.length-3) anim(el,[{transform:'translateY(-30px)',opacity:0},{transform:'translateY(0)',opacity:1}],{duration:300,delay:i*40,easing:'ease-out',fill:'backwards'}); }); }
 
 /* ===== 精算 ===== */
@@ -1774,12 +1758,12 @@ function kyokuClear(){
   const heal=f.boss&&S.hp<S.hpMax?1:0;
   const total=base+starG+sg+interest;
   bachin(12);
-  const fresh=recordClear(stars);
+  const prevBest=(META.score||{})[S.face]||0, fresh=recordClear(stars);
   openModal(`<h2>${stars===3?'天誅':'突破'}</h2>${fresh.length?`<div class="unlockNote">解放！　${fresh.map(p=>p.nm).join('、')}</div>`:''}
     <div class="bigStars">${sl.map(x=>`<span class="${x.on?'':'off'}">★</span>`).join('')}</div>
     <div class="starLbl">${sl.map(x=>`<span class="${x.on?'':'off'}">${x.k}</span>`).join('')}</div>
     <div class="rows">
-    <div class="row"><span>点数</span><span>${S.faceScore}${S.mode==='fixed'&&(META.score[S.face]||0)<=S.faceScore?'　<b style="color:var(--gold)">最高記録</b>':''}</span></div>
+    <div class="row"><span>点数</span><span>${S.faceScore}${S.mode==='fixed'&&!S.demo&&S.faceScore>prevBest?'　<b style="color:var(--gold)">最高記録</b>':''}</span></div>
     <div class="row"><span>突破報酬</span><span class="g">+${base}</span></div>
     <div class="row"><span>星</span><span class="g">${starG?'+'+starG:'なし'}</span></div>
     <div class="row"><span>点数ボーナス</span><span class="g">${sg?'+'+sg:'なし'}</span></div>
@@ -1794,10 +1778,10 @@ function kyokuClear(){
   $('#mRpPlay').onclick=()=>replayOpen(false);
   $('#mSavePz').onclick=e=>savePuzzleNow(e.currentTarget);
   // もう一度遊ぶ：この結果は取っておく。いつでも「前の結果で進む」で戻れる
-  $('#mAgain2').onclick=()=>{ const pc=clone({...S,prevClear:null}); S.prevClear=pc; closeModal(); S.hp=pc.hpStart??S.hp; S.faceScore=S.kyokuStartScore??0; S.kyoku++; startKyoku(); };
+  $('#mAgain2').onclick=()=>{ const pc=clone({...S,prevClear:null,ckpt:null}); S.prevClear=pc; closeModal(); S.hp=pc.hpStart??S.hp; S.faceScore=S.kyokuStartScore??0; S.kyoku++; startKyoku(); };
 }
 // 撤退：体力−1で茶屋に戻り、持ち物を整えて同じ陣に出直す（同じ持ち物で同じ陣に挑んでも結果は同じなので）
-function usePrevClear(){ const pc=S.prevClear; S=pc; S.phase='over'; closeModal(); render(); kyokuClear(); }
+function usePrevClear(){ const pc=S.prevClear, ms=S.rtaMs, ck=S.ckpt; S=pc; S.ckpt=ck; if(S.rta) S.rtaMs=Math.max(S.rtaMs||0,ms||0); S.phase='over'; closeModal(); render(); kyokuClear(); }
 function retryFailed(){
   bgmPause(false);
   S.phase='over'; busy=false;
@@ -1820,7 +1804,8 @@ function kyokuFail(){
     openModal(`<h2>撤退</h2>
       <p>討ちもらした。体力−1（残り${S.hp}）。${rg?`<br>撤退金 <b style="color:var(--gold)">+${rg}金</b>。`:''}<br>茶屋で整えて、出直そう。</p>
       <button class="btn pri" id="mNext" type="button" style="width:100%">茶屋へ</button>`);
-    $('#mNext').onclick=()=>{ S.retry=true; genShop(); renderShop(); };
+    S.retry=true; genShop(); saveRun('shop'); // 撤退した時点で保存（再読み込みで体力が戻らないように）
+    $('#mNext').onclick=renderShop;
     return;
   }
   gameOver('シノビが倒れた');
@@ -1875,7 +1860,7 @@ function rewardPicker(){
     S.rewardOpts=opts; S.rewardSel=null; }
   const opts=S.rewardOpts, sel=S.rewardSel;
   const full=S.bag.length>=S.slots;
-  openModal(`<h2>戦利品${(S.rewardLeft||1)>1?`（あと${S.rewardLeft}つ）`:''}</h2><p>1つ選ぶ（持ち物 ${S.bag.length}/${S.slots}）</p>
+  openModal(`<h2>戦利品${(S.rewardLeft||1)>1?`（あと${S.rewardLeft}つ）`:''}</h2>${rtaChip()}<p>1つ選ぶ（持ち物 ${S.bag.length}/${S.slots}）</p>
     ${opts.map((c,i)=>c.kind==='enh'?optHTML({kind:'p',code:'x',m:c.sh.m},`付与：${c.sh.nm}`,'持ち物の駒1枚に付ける',`data-i="${i}"${sel===i?' aria-pressed="true" style="outline:3px solid var(--gold)"':''}`):optHTML(c,cardName(c),`新しい駒・${tierLabel(T[c.code].tier)}`,`data-i="${i}"${sel===i?' aria-pressed="true" style="outline:3px solid var(--gold)"':''}`)).join('')}
     <button class="btn pri" id="mTake" type="button" style="width:100%;margin-bottom:6px" ${sel==null?'disabled':''}>${sel==null?'選ぶ':opts[sel].kind==='enh'?'付ける駒を選ぶ':full?'入れ替える札を選ぶ':'これにする'}</button>
     <button class="btn" id="mBag2" type="button" style="width:100%;margin-bottom:6px">持ち物を見る</button>
@@ -1899,7 +1884,7 @@ function optHTML(card,title,sub,attr){
 }
 function gameOver(why){
   bgmPause(false);
-  S.phase='over'; busy=false; recordEnd(false);
+  S.phase='over'; busy=false; S.rtaDone=true; recordEnd(false);
   openModal(`<h2>ここまで</h2>
     <p>${why}。${faceTitle(S.face)}まで到達。</p>
     <div class="rows"><div class="row"><span>★</span><span>${(S.runLog||[]).reduce((a,r)=>a+r.st,0)}</span></div><div class="row"><span>合計点数</span><span>${(S.runLog||[]).reduce((a,r)=>a+r.sc,0).toLocaleString()}点</span></div></div>
@@ -1928,7 +1913,7 @@ function stageListHTML(){
   return `<div class="stageList">${log.map(r=>`<div class="stRow"><span class="fn">${Math.floor(r.f/PER_ACT)+1}-${r.f%PER_ACT+1}</span><span class="nm">${r.nm}</span><span class="sc">${r.sc.toLocaleString()}点</span><span class="st">${'★'.repeat(r.st)}<span class="off">${'★'.repeat(3-r.st)}</span></span></div>`).join('')}</div>`;
 }
 function victory(){
-  recordEnd(true);
+  S.rtaDone=true; recordEnd(true);
   const R=runRank(); if(S.rta&&R.rank==='S'){ if(typeof META.rtaBest!=='object'||!META.rtaBest) META.rtaBest=META.rtaBest?{fixed:META.rtaBest}:{}; const c=S.rtaCat||'fixed'; if(!META.rtaBest[c]||S.rtaMs<META.rtaBest[c]){ META.rtaBest[c]=Math.round(S.rtaMs); S.rtaNew=true; } } META.rank=META.rank||{}; const order='CBAS'; if(order.indexOf(R.rank)>order.indexOf(META.rank[S.mode]||'')) META.rank[S.mode]=R.rank; saveMeta(META);
   openModal(`<h2>全三幕 制覇</h2><p>${MODE_NM[S.mode]}モード、すべての陣を落とした。</p>
     <div class="rankBig r${R.rank}">${R.rank}</div><div class="rankNm">${RANK_NM[R.rank]}</div>
@@ -1945,10 +1930,10 @@ function victory(){
 /* ===== ショップ ===== */
 function randomCard(){
   const z=RNG();
-  if(z<.6){ const its=Object.keys(ITEMS).filter(k=>unlocked('item',k)&&!(k==='missive'&&S.shelf.some(e=>e.it==='missive'))), it=its[rand(its.length)]; return {card:mkI(it),price:ITEM_PRICE[it]}; }
+  if(z<.6){ const its=Object.keys(ITEMS).filter(k=>unlocked('item',k)&&!(k==='missive'&&S.shelf.some(e=>e.it==='missive'))), it=its[rand(its.length)]; return {card:mkI(it),price:BAL.item[it]}; }
   const x=RNG(), adv=S.face/5, t=x<.6-adv*.2?0:x<.9-adv*.1?1:2;
   const pool=TIER[t].filter(c=>c!=='K'), code=pool[rand(pool.length)];
-  return {card:mkP(code),price:PRICE[T[code].tier]};
+  return {card:mkP(code),price:BAL.piece[T[code].tier]};
 }
 // 茶屋：買う・売る・キープ（次の茶屋まで取っておく）・品替え
 const SHOP_SLOTS=5;
@@ -1959,9 +1944,9 @@ function freshItem(exclude){
   if(x<.62){ const r=randomCard(); return {type:'card',...r}; }
   if(x<.84){ const bombs=S.shelf.filter(c=>c.it==='bomb'&&(c.lv||1)<BOMB_MAX);
     const r=RNG();
-    if(S.shelfMax<SHELF_MAX&&r<.2) return {type:'shelf',price:SHELF_UP_PRICE};
-    if(S.hp<S.hpMax&&r<.3) return {type:'heal',price:HEAL_PRICE};
-    if(S.slots<SLOTS_MAX&&r<.4&&RNG()<.12) return {type:'slot',price:SLOT_PRICE}; // 持ち物+1はかなりまれ
+    if(S.shelfMax<SHELF_MAX&&r<.2) return {type:'shelf',price:BAL.shelf};
+    if(S.hp<S.hpMax&&r<.3) return {type:'heal',price:BAL.heal};
+    if(S.slots<SLOTS_MAX&&r<.4&&RNG()<.12) return {type:'slot',price:BAL.slot}; // 持ち物+1はかなりまれ
     if(bombs.length&&RNG()<.4) return {type:'up',kind:'bomb',price:bombUpPrice(Math.min(...bombs.map(c=>c.lv||1)))};
     const d=Object.keys(DIRS)[rand(8)]; return {type:'up',kind:'dir',d,price:4}; }
   return {type:'book',k:YORDER[rand(YORDER.length)],price:4};
@@ -1972,7 +1957,7 @@ const isTechIt=it=>['tech','techup','techmore','tslot'].includes(it.type);
 function techItems(n,keep){
   const own=S.techs||[], room=techTotal()<(S.techSlots||TECH_SLOTS0), c=[];
   if(room) Object.keys(TECHS).filter(k=>!own.includes(k)).forEach(k=>c.push({type:'tech',k,price:TECH_PRICE}));
-  own.filter(k=>TECHS[k].maxLv&&techLv(k)<TECHS[k].maxLv&&(k!=='kei'||RNG()<.3)).forEach(k=>c.push({type:'techup',k,price:techUpPrice(techLv(k))})); // 跳躍の修行はまれ
+  own.filter(k=>TECHS[k].maxLv&&techLv(k)<TECHS[k].maxLv).forEach(k=>c.push({type:'techup',k,price:techUpPrice(techLv(k))}));
   if(room) own.forEach(k=>c.push({type:'techmore',k,price:techMorePrice(techN(k))}));
   if(own.length&&(S.techSlots||TECH_SLOTS0)<TECH_SLOTS_MAX) c.push({type:'tslot',price:tslotPrice()});
   const key=it=>it.type+(it.k||''), have=new Set(keep.map(key)), out=[];
@@ -2027,9 +2012,9 @@ const ckptButtons=()=>{ const d=loadCkpt(); return d&&d.ck?Object.keys(d.ck).map
 const bindCkpt=()=>document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>restoreAct(+b.dataset.act));
 function genShop(){ S.reroll=BAL.rerollStart; fillShop(); S.shopEntry=null;
   // 第五面（城）までは、城を崩す道具が茶屋に必ず1つ並ぶ
-  if(S.face<5&&!S.shop.some(it=>it.type==='card'&&it.card.kind==='i'&&(it.card.it==='bomb'||it.card.it==='lure'))){ const it=['bomb','lure'][rand(2)]; S.shop[SHOP_SLOTS-1]={type:'card',card:mkI(it),price:ITEM_PRICE[it]}; }
+  if(S.face<5&&!S.shop.some(it=>it.type==='card'&&it.card.kind==='i'&&(it.card.it==='bomb'||it.card.it==='lure'))){ const it=['bomb','lure'][rand(2)]; S.shop[SHOP_SLOTS-1]={type:'card',card:mkI(it),price:BAL.item[it]}; }
   // 最初の茶屋は、爆弾・矢印・囮が必ず並ぶ（ここで買った道具が方向付けになる）
-  if(S.firstShop){ S.firstShop=false; ['bomb','arrow','lure'].forEach((it,i)=>{ S.shop[i]={type:'card',card:mkI(it),price:ITEM_PRICE[it]}; }); }
+  if(S.firstShop){ S.firstShop=false; ['bomb','arrow','lure'].forEach((it,i)=>{ S.shop[i]={type:'card',card:mkI(it),price:BAL.item[it]}; }); }
   repriceShop(); takeCkpt();
 }
 function itemInfo(it){
@@ -2049,7 +2034,8 @@ function itemInfo(it){
   return {nm:it.type,ds:''};
 }
 const sellFan=j=>Math.floor(fanPrice(j)/2);
-const sellCard=c=>c.kind!=='p'?2:Math.max(1,Math.floor(PRICE[T[c.code].tier]/2));
+const sellCard=c=>c.kind!=='p'?2:Math.max(1,Math.floor((BAL.piece[T[c.code].tier]??BAL.piece[4])/2));
+const sellItem=it=>Math.max(1,Math.floor((BAL.item[it]??4)/2));
 function renderShop(){
   repriceShop();
   if(S.phase!=='shop'||!S.shopEntry) { S.phase='shop'; shopMark(); }
@@ -2058,14 +2044,16 @@ function renderShop(){
     if(it.sold) return `<div class="item sold"><span class="nm">売り切れ</span></div>`;
     const shelfFull=it.type==='card'&&it.card.kind==='i'&&(shelfCount()>=S.shelfMax||(it.card.it==='missive'&&S.shelf.some(e=>e.it==='missive')));
     const bagFull=it.type==='card'&&it.card.kind!=='i'&&S.bag.length>=S.slots;
-    const inf=itemInfo(it), dis=S.gold<it.price||(it.type==='fan'&&S.fans.length>=MAX_FANS)||shelfFull||bagFull;
+    const capped=(it.type==='heal'&&S.hp>=S.hpMax)||(it.type==='slot'&&S.slots>=SLOTS_MAX)||(it.type==='shelf'&&S.shelfMax>=SHELF_MAX);
+    const inf=itemInfo(it), dis=S.gold<it.price||(it.type==='fan'&&S.fans.length>=MAX_FANS)||shelfFull||bagFull||capped;
+    if(capped) inf.ds+=it.type==='heal'?'（体力は満タン）':'（もう増やせない）';
     if(shelfFull) inf.ds+=it.card.it==='missive'&&S.shelf.some(e=>e.it==='missive')?'（密書は1つまで）':'（棚がいっぱい）';
     if(bagFull) inf.ds+='（持ち物がいっぱい）';
     return `<div class="item${inf.cls||''}${it.locked?' locked':''}"><span class="nm">${inf.nm}</span><span class="ds">${inf.ds}</span>
       <span class="act"><button class="buyB" type="button" data-i="${i}" ${dis?'disabled':''}>${it.price}金で買う</button><button class="lockB" type="button" data-l="${i}" aria-pressed="${!!it.locked}">${it.locked?'キープ中':'キープ'}</button></span></div>`;}).join('');
   const fans=S.fans.map((j,i)=>`<div class="own"><span><b>${FANS[j].name}</b>　${FANS[j].desc}</span><button class="sellB" type="button" data-f="${i}">売る +${sellFan(j)}金</button></div>`).join('')||'<p>巻物はまだない</p>';
-  const shelf=S.shelf.map((c,i)=>`<div class="own"><span><b>${ITEMS[c.it].name}×${c.n}</b>${c.it==='bomb'?`（${BOMB_LV[c.lv||1]}）`:''}　${ITEMS[c.it].desc}</span><button class="sellB" type="button" data-s="${i}">1つ売る +${Math.max(1,Math.floor(ITEM_PRICE[c.it]/2))}金</button></div>`).join('')||'<p>道具棚は空</p>';
-  openModal(`<h2>茶屋</h2><p>所持金 <b class="g">${S.gold}金</b>　巻物 ${S.fans.length}/${MAX_FANS}　道具棚 ${shelfCount()}/${S.shelfMax}　技 ${techTotal()}/${S.techSlots||TECH_SLOTS0}　持ち物 ${S.bag.length}/${S.slots}</p>
+  const shelf=S.shelf.map((c,i)=>`<div class="own"><span><b>${ITEMS[c.it].name}×${c.n}</b>${c.it==='bomb'?`（${BOMB_LV[c.lv||1]}）`:''}　${ITEMS[c.it].desc}</span><button class="sellB" type="button" data-s="${i}">1つ売る +${sellItem(c.it)}金</button></div>`).join('')||'<p>道具棚は空</p>';
+  openModal(`<h2>茶屋</h2>${rtaChip()}<p>所持金 <b class="g">${S.gold}金</b>　巻物 ${S.fans.length}/${MAX_FANS}　道具棚 ${shelfCount()}/${S.shelfMax}　技 ${techTotal()}/${S.techSlots||TECH_SLOTS0}　持ち物 ${S.bag.length}/${S.slots}</p>
     <div class="items">${cards}</div>
     <button class="btn" id="mReroll" type="button" style="width:100%;margin-bottom:6px" ${S.gold<S.reroll?'disabled':''}>品替え（${S.reroll}金）</button>
     <h3 class="sh">道具棚</h3>${shelf}
@@ -2076,7 +2064,7 @@ function renderShop(){
   document.querySelectorAll('.buyB').forEach(b=>b.onclick=()=>buy(+b.dataset.i));
   document.querySelectorAll('.lockB').forEach(b=>b.onclick=()=>{const it=S.shop[+b.dataset.l]; it.locked=!it.locked; tok(1); renderShop();});
   document.querySelectorAll('.sellB[data-f]').forEach(b=>b.onclick=()=>{const i=+b.dataset.f, j=S.fans[i]; S.gold+=sellFan(j); S.fans.splice(i,1); bachin(3); renderShop();});
-  document.querySelectorAll('.sellB[data-s]').forEach(b=>b.onclick=()=>{const i=+b.dataset.s, c=S.shelf[i]; S.gold+=Math.max(1,Math.floor(ITEM_PRICE[c.it]/2)); c.n--; if(c.n<=0) S.shelf.splice(i,1); bachin(3); renderShop();});
+  document.querySelectorAll('.sellB[data-s]').forEach(b=>b.onclick=()=>{const i=+b.dataset.s, c=S.shelf[i]; S.gold+=sellItem(c.it); c.n--; if(c.n<=0) S.shelf.splice(i,1); bachin(3); renderShop();});
   $('#mReroll').onclick=()=>{ if(S.gold<S.reroll) return; S.gold-=S.reroll; S.reroll++; fillShop(); tok(1); renderShop(); };
   $('#mBag').onclick=bagSell;
   $('#mUndoShop').onclick=()=>{ if(!S.shopEntry) return; Object.assign(S,clone(S.shopEntry)); tok(2); renderShop(); };
@@ -2088,12 +2076,13 @@ function buy(i){
   const it=S.shop[i]; if(!it||it.sold||S.gold<it.price) return;
   if(it.type==='fan'&&S.fans.length>=MAX_FANS) return;
   if(it.type==='up') return upPicker(i);
+  if((it.type==='heal'&&S.hp>=S.hpMax)||(it.type==='slot'&&S.slots>=SLOTS_MAX)||(it.type==='shelf'&&S.shelfMax>=SHELF_MAX)) return;
   S.gold-=it.price; it.sold=true; it.locked=false; bachin(4);
   if(it.type==='fan') S.fans.push(it.j);
   if(it.type==='card'){ if(it.card.kind==='i'){
       // 同じ道具は同じ枠に重なり、1局に使える回数が増える
       const e=S.shelf.find(e=>e.it===it.card.it);
-      if(shelfCount()>=S.shelfMax||(it.card.it==='missive'&&e)){ S.gold+=it.price; it.sold=false; return; } if(e) e.n++; // 密書は1つまで else S.shelf.push({it:it.card.it,lv:1,n:1});
+      if(shelfCount()>=S.shelfMax||(it.card.it==='missive'&&e)){ S.gold+=it.price; it.sold=false; return; } if(e) e.n++; else S.shelf.push({it:it.card.it,lv:1,n:1}); // 密書は1つまで（上で弾く）
     } else { if(S.bag.length>=S.slots){ S.gold+=it.price; it.sold=false; return; } S.bag.push(it.card); } }
   if(it.type==='heal') S.hp=Math.min(S.hpMax,S.hp+1);
   if(it.type==='tech'){ S.techs=S.techs||[]; if(techTotal()>=S.techSlots||S.techs.includes(it.k)){ S.gold+=it.price; it.sold=false; return; } S.techs.push(it.k); S.techN={...(S.techN||{}),[it.k]:1}; }
@@ -2147,8 +2136,7 @@ function itemSVG(c,dir){
   if(c.it==='bomb'){ const lv=c.lv||1; let rays='';
     const ray=(dx,dy,far)=>{const L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L; rays+=`<line class="ray" x1="${50+ux*24}" y1="${50+uy*24}" x2="${50+ux*(far?44:33)}" y2="${50+uy*(far?44:33)}"/>`;};
     for(const [dx,dy] of ORTH) ray(dx,dy,lv>=3);
-    if(lv===2||lv===4) for(const [dx,dy] of DIAG) ray(dx,dy,false);
-    if(lv>=5) for(const [dx,dy] of DIAG) ray(dx,dy,true);
+    if(lv>=2) for(const [dx,dy] of DIAG) ray(dx,dy,lv>=4);
     icon=`${rays}<circle class="ic" cx="50" cy="50" r="17"/><circle class="spark" cx="62" cy="38" r="5"/>`; }
   if(c.it==='lure') icon=`<circle class="ic" cx="50" cy="40" r="13"/><path class="ic" d="M30 78 Q50 46 70 78 Z"/><path class="icl" d="M22 24 L32 34 M78 24 L68 34" style="stroke:#C0392B"/>`;
   if(c.it==='missive') icon=`<rect class="icl" x="22" y="30" width="56" height="40" rx="4"/><path class="icl" d="M22 32 L50 54 L78 32"/><circle cx="50" cy="62" r="7" style="fill:#C0392B"/>`;
@@ -2168,7 +2156,7 @@ const SKINS={
   shuriken:{name:'手裏剣',svg:`<path d="M50 16 L57 43 L84 50 L57 57 L50 84 L43 57 L16 50 L43 43 Z" fill="#24426E"/><circle cx="50" cy="50" r="7" fill="#FFF6DA"/>`},
 };
 let SKIN='kanji';
-try{ const k=localStorage.getItem('shogiRL.skin'); if(k&&SKINS[k]) SKIN=k; }catch(e){}
+try{ const k=lsGet('skin'); if(k&&SKINS[k]) SKIN=k; }catch(e){}
 // 開発モード：面の移動、お金・体力、持ち物・道具棚・巻物の編集
 function devPanel(){
   if(!S) return;
@@ -2217,12 +2205,12 @@ function devPanel(){
     if(k==='addT'){ const t=$('#dvTech').value; S.techs=S.techs||[]; if(!S.techs.includes(t)) S.techs.push(t); else S.techN={...(S.techN||{}),[t]:techN(t)+1}; if(techTotal()>(S.techSlots||TECH_SLOTS0)) S.techSlots=techTotal(); }
     if(k==='swLv'){ const t=$('#dvTech').value; if(TECHS[t].maxLv) S.techLv={...(S.techLv||{}),[t]:Math.min(TECHS[t].maxLv,techLv(t)+1)}; }
     if(k==='clrT'){ S.techs=[]; S.techLv={}; S.techN={}; }
-    if(k==='balSet'){ try{ BAL=Object.assign(clone0(BAL0),JSON.parse($('#dvBal').value)); localStorage.setItem('shinobiRL.bal',JSON.stringify(BAL)); hintMsg('調整表を反映した'); }catch(e){ hintMsg('調整表が読めない（JSONの形を確認）'); } }
+    if(k==='balSet'){ try{ BAL=mergeBal(JSON.parse($('#dvBal').value)); localStorage.setItem('shinobiRL.bal',JSON.stringify(BAL)); hintMsg('調整表を反映した'); }catch(e){ hintMsg('調整表が読めない（JSONの形を確認）'); } }
     if(k==='balReset'){ BAL=clone0(BAL0); try{ localStorage.removeItem('shinobiRL.bal'); }catch(e){} }
     if(k==='unlockAll'){ META.devUnlock=!META.devUnlock; saveMeta(META); }
     re(); });
   document.querySelectorAll('[data-lm]').forEach(b=>b.onclick=()=>{ const k=b.dataset.lm;
-    const save=()=>{ try{ localStorage.setItem('shogiRL.layoutMode',LAYOUT_MODE); localStorage.setItem('shogiRL.layoutSeed',LAYOUT_SEED); }catch(e){} };
+    const save=()=>{ try{ localStorage.setItem('shinobiRL.layoutMode',LAYOUT_MODE); localStorage.setItem('shinobiRL.layoutSeed',LAYOUT_SEED); }catch(e){} };
     if(k==='keep'){ LAYOUT_MODE='fixed'; LAYOUT_SEED=S.layoutSeed; save(); devPanel(); }
     if(k==='random'){ LAYOUT_MODE='random'; save(); devPanel(); }
     if(k==='reroll'){ closeModal(); newRun('random'); }
@@ -2235,7 +2223,7 @@ function skinPicker(){
   openModal(`<h2>見た目</h2><p>シノビの見た目を選ぶ。遊び方は変わらない。</p>
     ${Object.entries(SKINS).map(([k,v])=>!unlocked('skin',k)?`<div class="opt" style="opacity:.45;cursor:default"><span class="t"><b>🔒 ${PASS.find(p=>p.key===k).at}面突破で解放</b></span></div>`:`<button class="opt" type="button" data-skin="${k}"${k===SKIN?' aria-pressed="true"':''}><svg class="pz mine" viewBox="0 0 100 100" aria-hidden="true"><rect class="tile" x="4" y="4" width="92" height="92" rx="16" style="fill:#FFF6DA;stroke:#E8A23A;stroke-width:5"/>${v.svg}</svg><span class="t"><b>${v.name}</b>${k===SKIN?'いま使っている':''}</span></button>`).join('')}
     <button class="btn pri" id="mBack" type="button" style="width:100%">閉じる</button>`);
-  document.querySelectorAll('.opt[data-skin]').forEach(b=>b.onclick=()=>{ SKIN=b.dataset.skin; try{localStorage.setItem('shogiRL.skin',SKIN);}catch(e){} if(S&&S.board) render(); skinPicker(); });
+  document.querySelectorAll('.opt[data-skin]').forEach(b=>b.onclick=()=>{ SKIN=b.dataset.skin; try{localStorage.setItem('shinobiRL.skin',SKIN);}catch(e){} if(S&&S.board) render(); skinPicker(); });
   $('#mBack').onclick=closeModal;
 }
 function cardSVG(c,opt={}){
@@ -2283,10 +2271,11 @@ function sizeBoard(){
 // RTA（100%）：★3がそろった計画でしか決行できない。全滅していない「撤退」はできる
 let retreatArmed=false, retreatT=0;
 const rtaBlock=()=>!!(S.rta&&allDead()&&!starList().every(x=>x.on));
-// ゲーム内タイマー：演出中・タイトル表示中は止まる
+// ゲーム内タイマー：茶屋・戦利品・リザルトの間も進む。止まるのは演出中・リプレイ中・タイトル表示中・ランが終わった後
 let rtaLast=performance.now();
 setInterval(()=>{ const now=performance.now(), dt=now-rtaLast; rtaLast=now;
-  if(S&&S.rta&&!S.demo&&!busy&&S.phase!=='over'&&!(!$('#modal').hidden&&document.querySelector('#sheet .title'))&&document.visibilityState==='visible'){ S.rtaMs=(S.rtaMs||0)+dt; const el=$('#rtaT'); if(el) el.textContent=fmtTime(S.rtaMs); } },100);
+  if(S&&S.rta&&!S.demo&&!S.rtaDone&&!busy&&S.phase!=='replay'&&!(!$('#modal').hidden&&document.querySelector('#sheet .title'))&&document.visibilityState==='visible'){ S.rtaMs=(S.rtaMs||0)+dt; document.querySelectorAll('.rtaClock').forEach(el=>el.textContent=fmtTime(S.rtaMs)); } },100);
+const rtaChip=()=>S&&S.rta?`<p class="rtaClockRow">RTA <b class="rtaClock">${fmtTime(S.rtaMs||0)}</b></p>`:'';
 const fmtTime=ms=>{ const t=Math.floor(ms/100), d=t%10, sec=Math.floor(t/10)%60, m=Math.floor(t/600)%60, h=Math.floor(t/36000); return `${h?h+':':''}${String(m).padStart(h?2:1,'0')}:${String(sec).padStart(2,'0')}.${d}`; };
 function renderStats(){
   const sg=scoreGold(S.faceScore,S.par), nx=sg<SCORE_GOLD_MAX?S.par*Math.pow(2,sg):null;
@@ -2294,7 +2283,7 @@ function renderStats(){
     <div class="stat"><span class="lb">所持金</span><span class="v">${S.gold}</span></div>
     <div class="stat"><span class="lb">体力</span><span class="hpH">${Array.from({length:S.hpMax},(_,i)=>`<span class="${i>=S.hp?'off':''}">♥</span>`).join('')}</span>${S.hp<=0?'<span class="lb" style="color:var(--mult);font-weight:700">瀕死：次で倒れる</span>':''}</div>
     
-    <div class="stat goal"><span class="lb">${S.rta?`RTA ${S.rtaCat==='random'?'ランダム':'固定'}シード`:'この面の点数'}</span><span class="v"${S.rta?' id="rtaT"':''}>${S.rta?fmtTime(S.rtaMs||0):S.faceScore}</span><span class="lb">${S.rta?`点数 ${S.faceScore}`:`基準 ${S.par}`}</span></div>`;
+    <div class="stat goal"><span class="lb">${S.rta?`RTA ${S.rtaCat==='random'?'ランダム':'固定'}シード`:'この面の点数'}</span><span class="v${S.rta?' rtaClock':''}">${S.rta?fmtTime(S.rtaMs||0):S.faceScore}</span><span class="lb">${S.rta?`点数 ${S.faceScore}`:`基準 ${S.par}`}</span></div>`;
 }
 let lastLive={chips:-1,mult:-1};
 function renderScorebox(){
@@ -2387,8 +2376,6 @@ function render(){
     +((S.techs||[]).length?`<span class="daiLb">技（右下は捨てる手札の枚数）</span>${S.techs.map(k=>Array.from({length:techN(k)},(_,n)=>n<techLeft(k)
       ?`<button class="tp tool tech${S.pending&&S.pending.tech===k?' sel':''}" data-tech="${k}" type="button" aria-label="${TECHS[k].name}">${techSVG(k)}<span class="cnt">${costBadge(k)}</span>${TECHS[k].maxLv?`<span class="cnt lv">Lv${techLv(k)}</span>`:''}</button>`
       :`<span class="tp tool tech usedC" aria-label="${TECHS[k].name}（使った）">${techSVG(k)}</span>`).join('')).join('')}`:'');
-    +((S.techs||[]).length?`<span class="daiLb">技（右上は残り回数・右下は捨てる手札の枚数）</span>${S.techs.map(k=>`<button class="tp tool tech${S.pending&&S.pending.tech===k?' sel':''}" data-tech="${k}" type="button" aria-label="${TECHS[k].name} 残り${techLeft(k)}回"${techLeft(k)<=0?' style="opacity:.35"':''}>${techSVG(k)}<span class="cnt use">${techLeft(k)}</span><span class="cnt">${costBadge(k)}</span>${TECHS[k].maxLv?`<span class="cnt lv">Lv${techLv(k)}</span>`:''}</button>`).join('')}`:'');
-  if(false) $('#dai').innerHTML=S.dai.length?`<span class="daiLb">駒台（次の手番で手札へ）</span>${S.dai.map(c=>`<span class="tp mini" data-id="${c.id}">${cardSVG(c)}</span>`).join('')}`:(S.overflow&&play?`<span class="daiLb">手札が${HAND_MAX}枚を超えた分、${S.overflow}枚を捨て札にした</span>`:'');
 
   // 情報欄
   let info='';
@@ -2482,7 +2469,7 @@ function chips(c,r,n){
     const d=document.createElement('span'); d.className='chip';
     d.style.left=pt[0]+'px'; d.style.top=pt[1]+'px'; $('#fx').appendChild(d);
     const a=Math.random()*Math.PI*2, v=30+Math.random()*(n>20?140:70);
-    anim(d,[{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${Math.cos(a)*v}px,${Math.sin(a)*v+30}px) rotate(${rand(540)}deg)`,opacity:0}],{duration:450+rand(300),easing:'cubic-bezier(.2,.7,.4,1)'},true);
+    anim(d,[{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${Math.cos(a)*v}px,${Math.sin(a)*v+30}px) rotate(${Math.floor(Math.random()*540)}deg)`,opacity:0}],{duration:450+Math.floor(Math.random()*300),easing:'cubic-bezier(.2,.7,.4,1)'},true);
   }
 }
 function floatText(c,r,text,cls,row=0){
