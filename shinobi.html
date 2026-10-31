@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>シノビ（仮題） 試作 v87</title>
+<title>シノビ（仮題） 試作 v88</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -928,7 +928,7 @@ const fixedStars=()=>Object.values(META.stars).reduce((a,b)=>a+b,0);
 const rtaRec=c=>{ const b=META.rtaBest&&typeof META.rtaBest==='object'?META.rtaBest[c]:(c==='fixed'?META.rtaBest:0); return b?`記録 ${fmtTime(b)}`:'記録 まだ'; };
 function showTitle(){
   const d=loadRun(), N=ACTS*PER_ACT, best=k=>META.best[k]<0?'まだ':META.best[k]>=N-1&&META.clears[k]?'制覇':faceTitle(META.best[k])+'まで';
-  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v87</p></div>
+  openModal(`<div class="title"><h1>シノビ</h1><p class="sub">（仮題）　試作 v88</p></div>
     ${d?`<button class="btn pri" id="tCont" type="button" style="width:100%;margin-bottom:6px">つづきから<br><small>${d.S.rta?`RTA ${d.S.rtaCat==='random'?'ランダム':'固定'}シード`:MODE_NM[d.S.mode]||'固定'}・${faceTitle(d.S.face)}${d.S.resumeAt==='kyoku'?'':(d.S.retry?'（出直し前）':'を突破したところ')}</small></button>
     <button class="btn" id="tRestart" type="button" style="width:100%;margin-bottom:6px">最初から（${MODE_NM[d.S.mode]||'固定'}・第一面から）</button>`:''}
     ${ckptButtons()}<div style="height:6px"></div>
@@ -1590,7 +1590,6 @@ function hintMsg(t){ $('#hint').textContent=t; }
 
 /* ===== 実行：計画を頭から加速しながら再生 ===== */
 async function execute(){
-  bgmPause(true); // 決行の間はBGMを止める
   if(busy||S.phase!=='play') return;
   busy=true; S.phase='anim';
   const acts=S.actions.slice();
@@ -1620,7 +1619,6 @@ function actLabel(a){
 }
 // 通常速度：決行と同じ（だんだん速くなる）。スロー：全部の手を同じゆっくりした速さで
 function replayOpen(slow){
-  bgmPause(true);
   if(!S.replayData) return;
   RP={keep:clone(S),i:0,playing:false}; closeModal();
   restore(S.replayData.start); S.phase='replay'; S.sel=S.selPos=S.pending=null; S.live={chips:0,mult:0};
